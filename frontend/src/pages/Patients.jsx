@@ -2,15 +2,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Users, UserPlus, Search, Eye, X,
-  UserRound, FileText, HeartPulse
+  UserRound, FileText, HeartPulse,
+  CalendarDays, Building2, Clock3
 } from "lucide-react";
 
-// Backend API address
+// Backend API addresses
 const API_URL = "http://localhost:5000/api/patients";
+const REFERRALS_API_URL = "http://localhost:5000/api/referrals";
 
 // Convert backend database format into frontend format
 function formatPatient(patient) {
   return {
+    databaseId: patient.id,
     id: patient.patient_id,
     name: patient.name,
     age: patient.age,
@@ -31,6 +34,10 @@ export default function Patients() {
 
   const [showForm, setShowForm] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+
+  const [referralHistory, setReferralHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -73,6 +80,59 @@ export default function Patients() {
   useEffect(() => {
     fetchPatients();
   }, []);
+
+  // Fetch referral history for the selected patient
+  useEffect(() => {
+    if (!selectedPatient) {
+      setReferralHistory([]);
+      setHistoryError("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchReferralHistory() {
+      try {
+        setHistoryLoading(true);
+        setHistoryError("");
+
+        const response = await fetch(REFERRALS_API_URL);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || "Unable to load referral history.");
+        }
+
+        const patientReferrals = (data.referrals || []).filter(
+          (referral) =>
+            Number(referral.patient_database_id) ===
+            Number(selectedPatient.databaseId)
+        );
+
+        if (!cancelled) {
+          setReferralHistory(patientReferrals);
+        }
+      } catch (err) {
+        console.error("Fetch referral history error:", err);
+
+        if (!cancelled) {
+          setHistoryError(
+            "Unable to load referral history. Please try again."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    fetchReferralHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatient]);
 
   // Search and gender filtering
   const filteredPatients = useMemo(() => {
@@ -135,7 +195,6 @@ export default function Patients() {
         throw new Error(data.message || "Unable to register patient.");
       }
 
-      // Add the saved database record to the page
       const newPatient = formatPatient(data.patient);
 
       setPatients((previous) => [
@@ -152,6 +211,44 @@ export default function Patients() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Referral status styling
+  function getStatusStyle(status) {
+    const normalizedStatus = (status || "").toLowerCase();
+
+    if (normalizedStatus === "accepted") {
+      return {
+        background: "#dcfce7",
+        color: "#15803d"
+      };
+    }
+
+    if (normalizedStatus === "rejected") {
+      return {
+        background: "#fee2e2",
+        color: "#b91c1c"
+      };
+    }
+
+    if (normalizedStatus === "in review") {
+      return {
+        background: "#dbeafe",
+        color: "#1d4ed8"
+      };
+    }
+
+    if (normalizedStatus === "urgent") {
+      return {
+        background: "#fee2e2",
+        color: "#b91c1c"
+      };
+    }
+
+    return {
+      background: "#f1f5f9",
+      color: "#475569"
+    };
   }
 
   return (
@@ -516,7 +613,13 @@ export default function Patients() {
       {selectedPatient && (
         <div className="patient-modal-backdrop">
 
-          <div className="patient-modal">
+          <div
+            className="patient-modal"
+            style={{
+              maxHeight: "90vh",
+              overflowY: "auto"
+            }}
+          >
 
             <div className="patient-modal-heading">
 
@@ -571,7 +674,7 @@ export default function Patients() {
 
               <p>
                 <strong>Total referrals</strong>
-                <span>{selectedPatient.referrals}</span>
+                <span>{referralHistory.length}</span>
               </p>
 
               <p>
@@ -579,6 +682,291 @@ export default function Patients() {
                 <span>{selectedPatient.status}</span>
               </p>
 
+            </div>
+
+            {/* Referral History */}
+            <div
+              style={{
+                marginTop: "24px",
+                borderTop: "1px solid #e2e8f0",
+                paddingTop: "20px"
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "16px"
+                }}
+              >
+                <div>
+                  <h3
+                    style={{
+                      fontSize: "17px",
+                      color: "#0f172a",
+                      margin: 0
+                    }}
+                  >
+                    Referral History
+                  </h3>
+
+                  <p
+                    style={{
+                      fontSize: "12px",
+                      color: "#64748b",
+                      margin: "5px 0 0"
+                    }}
+                  >
+                    Previous and current referrals
+                  </p>
+                </div>
+
+                <span
+                  style={{
+                    background: "#e0f2fe",
+                    color: "#0369a1",
+                    padding: "6px 10px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: 600
+                  }}
+                >
+                  {referralHistory.length} referrals
+                </span>
+              </div>
+
+              {historyLoading && (
+                <p style={{ color: "#64748b", fontSize: "13px" }}>
+                  Loading referral history...
+                </p>
+              )}
+
+              {historyError && (
+                <p
+                  role="alert"
+                  style={{
+                    color: "#be123c",
+                    fontSize: "13px"
+                  }}
+                >
+                  {historyError}
+                </p>
+              )}
+
+              {!historyLoading &&
+                !historyError &&
+                referralHistory.length === 0 && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 12px",
+                      background: "#f8fafc",
+                      borderRadius: "12px",
+                      border: "1px dashed #cbd5e1"
+                    }}
+                  >
+                    <FileText
+                      size={28}
+                      color="#94a3b8"
+                      style={{ marginBottom: "8px" }}
+                    />
+
+                    <p
+                      style={{
+                        color: "#475569",
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        margin: 0
+                      }}
+                    >
+                      No referral history
+                    </p>
+
+                    <p
+                      style={{
+                        color: "#94a3b8",
+                        fontSize: "12px",
+                        margin: "5px 0 0"
+                      }}
+                    >
+                      Referrals for this patient will appear here.
+                    </p>
+                  </div>
+                )}
+
+              {!historyLoading &&
+                referralHistory.map((referral) => (
+                  <div
+                    key={referral.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "12px",
+                      padding: "14px",
+                      marginBottom: "12px",
+                      background: "#ffffff"
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                        marginBottom: "12px"
+                      }}
+                    >
+                      <div>
+                        <strong
+                          style={{
+                            fontSize: "13px",
+                            color: "#0f172a"
+                          }}
+                        >
+                          {referral.referral_id}
+                        </strong>
+
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            color: "#64748b",
+                            fontSize: "12px",
+                            marginTop: "6px"
+                          }}
+                        >
+                          <CalendarDays size={13} />
+                          {referral.referral_date || "Date unavailable"}
+                        </div>
+                      </div>
+
+                      <span
+                        style={{
+                          ...getStatusStyle(referral.status),
+                          padding: "5px 9px",
+                          borderRadius: "20px",
+                          fontSize: "11px",
+                          fontWeight: 600
+                        }}
+                      >
+                        {referral.status || "Pending"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "10px"
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "9px"
+                        }}
+                      >
+                        <Building2
+                          size={16}
+                          color="#64748b"
+                          style={{ marginTop: "2px", flexShrink: 0 }}
+                        />
+
+                        <div>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "11px",
+                              color: "#94a3b8"
+                            }}
+                          >
+                            Referring clinic
+                          </span>
+
+                          <strong
+                            style={{
+                              fontSize: "13px",
+                              color: "#334155"
+                            }}
+                          >
+                            {referral.referring_clinic || "Not specified"}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "9px"
+                        }}
+                      >
+                        <FileText
+                          size={16}
+                          color="#64748b"
+                          style={{ marginTop: "2px", flexShrink: 0 }}
+                        />
+
+                        <div>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "11px",
+                              color: "#94a3b8"
+                            }}
+                          >
+                            Reason for referral
+                          </span>
+
+                          <strong
+                            style={{
+                              fontSize: "13px",
+                              color: "#334155",
+                              fontWeight: 500
+                            }}
+                          >
+                            {referral.reason || "Not specified"}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "9px",
+                          flexWrap: "wrap"
+                        }}
+                      >
+                        <Clock3 size={16} color="#64748b" />
+
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "#64748b"
+                          }}
+                        >
+                          Priority:
+                        </span>
+
+                        <span
+                          style={{
+                            ...getStatusStyle(referral.priority),
+                            padding: "4px 8px",
+                            borderRadius: "20px",
+                            fontSize: "11px",
+                            fontWeight: 600
+                          }}
+                        >
+                          {referral.priority || "Normal"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
             </div>
 
             <p className="patient-demo-note">

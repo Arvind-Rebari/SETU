@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity, Bell, CalendarDays, CheckCircle2, ChevronDown,
   ChevronRight, ClipboardList, Clock3, FileText, HeartPulse,
@@ -11,6 +11,9 @@ import {
 import Referrals from "./pages/Referrals";
 import Patients from "./pages/Patients";
 import "./index.css";
+
+const PATIENTS_API = "http://localhost:5000/api/patients";
+const REFERRALS_API = "http://localhost:5000/api/referrals";
 
 export default function App() {
   const [activePage, setActivePage] = useState("Dashboard");
@@ -134,17 +137,104 @@ export default function App() {
 }
 
 function Dashboard({ onNavigate }) {
-  const stats = [
-    { title: "Total Referrals", value: "128", note: "Clinic referral records", icon: ClipboardList, color: "blue" },
-    { title: "Pending Review", value: "12", note: "Needs attention", icon: Clock3, color: "orange" },
-    { title: "Accepted Referrals", value: "94", note: "Successfully accepted", icon: CheckCircle2, color: "green" },
-    { title: "Urgent Referrals", value: "03", note: "Priority required", icon: AlertCircle, color: "red" }
-  ];
+  const [patients, setPatients] = useState([]);
+  const [referrals, setReferrals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const records = [
-    { name: "Ananya Sharma", id: "SETU-1024", reason: "Cardiology consultation", status: "Received", priority: "Normal" },
-    { name: "Rahul Mehta", id: "SETU-1025", reason: "Orthopaedic referral", status: "Pending", priority: "Urgent" },
-    { name: "Priya Nair", id: "SETU-1026", reason: "General medicine", status: "Accepted", priority: "Normal" }
+  useEffect(() => {
+    async function loadDashboardData() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [patientsResponse, referralsResponse] = await Promise.all([
+          fetch(PATIENTS_API),
+          fetch(REFERRALS_API)
+        ]);
+
+        if (!patientsResponse.ok || !referralsResponse.ok) {
+          throw new Error("Unable to load dashboard data.");
+        }
+
+        const patientsData = await patientsResponse.json();
+        const referralsData = await referralsResponse.json();
+
+        setPatients(patientsData.patients || []);
+        setReferrals(referralsData.referrals || []);
+      } catch (err) {
+        console.error("Dashboard loading error:", err);
+        setError("Could not connect to the SETU database. Please check that the backend is running.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboardData();
+  }, []);
+
+  const getStatus = (status) => (status || "").trim().toLowerCase();
+
+  const pendingCount = referrals.filter((r) =>
+    ["pending", "received", "in review"].includes(getStatus(r.status))
+  ).length;
+
+  const acceptedCount = referrals.filter(
+    (r) => getStatus(r.status) === "accepted"
+  ).length;
+
+  const rejectedCount = referrals.filter(
+    (r) => getStatus(r.status) === "rejected"
+  ).length;
+
+  const urgentCount = referrals.filter(
+    (r) => getStatus(r.priority) === "urgent"
+  ).length;
+
+  const recentReferrals = [...referrals]
+    .sort((a, b) => {
+      const dateA = new Date(a.created_at || a.referral_date || 0).getTime();
+      const dateB = new Date(b.created_at || b.referral_date || 0).getTime();
+      return dateB - dateA;
+    })
+    .slice(0, 3);
+
+  const stats = [
+    {
+      title: "Registered Patients",
+      value: patients.length,
+      note: "Total patient records",
+      icon: Users,
+      color: "blue"
+    },
+    {
+      title: "Total Referrals",
+      value: referrals.length,
+      note: "Clinic referral records",
+      icon: ClipboardList,
+      color: "blue"
+    },
+    {
+      title: "Pending Review",
+      value: pendingCount,
+      note: "Needs attention",
+      icon: Clock3,
+      color: "orange"
+    },
+    {
+      title: "Accepted Referrals",
+      value: acceptedCount,
+      note: "Successfully accepted",
+      icon: CheckCircle2,
+      color: "green"
+    },
+    {
+      title: "Urgent Referrals",
+      value: urgentCount,
+      note: "Priority required",
+      icon: AlertCircle,
+      color: "red"
+    }
   ];
 
   return (
@@ -154,7 +244,9 @@ function Dashboard({ onNavigate }) {
           <span className="welcome-label">YOUR HEALTHCARE WORKSPACE</span>
           <h1>Welcome back, Dr. Priya!</h1>
           <p>Manage patient referrals, coordinate with healthcare providers and keep every patient journey connected.</p>
-          <button onClick={() => onNavigate("Referrals")}>Explore Referrals <ArrowUpRight size={15} /></button>
+          <button onClick={() => onNavigate("Referrals")}>
+            Explore Referrals <ArrowUpRight size={15} />
+          </button>
         </div>
         <div className="welcome-art"><HeartPulse size={85} /></div>
       </section>
@@ -163,10 +255,16 @@ function Dashboard({ onNavigate }) {
         <div>
           <span className="section-eyebrow">OVERVIEW</span>
           <h2>Your Overview</h2>
-          <p>A quick look at clinic activity.</p>
+          <p>Live statistics from your SETU database.</p>
         </div>
-        <span className="date-filter"><CalendarDays size={16} /> Today</span>
+        <span className="date-filter"><CalendarDays size={16} /> Live Data</span>
       </div>
+
+      {error && (
+        <div className="panel" style={{ padding: "16px", marginBottom: "20px" }}>
+          <p style={{ color: "#b42318" }}>{error}</p>
+        </div>
+      )}
 
       <section className="stats-grid">
         {stats.map(({ title, value, note, icon: Icon, color }) => (
@@ -174,7 +272,7 @@ function Dashboard({ onNavigate }) {
             <div className={`stat-icon ${color}`}><Icon size={22} /></div>
             <div>
               <h3>{title}</h3>
-              <strong>{value}</strong>
+              <strong>{loading ? "..." : value}</strong>
               <p>{note}</p>
             </div>
           </div>
@@ -184,42 +282,119 @@ function Dashboard({ onNavigate }) {
       <section className="content-grid">
         <div className="panel recent-panel">
           <div className="panel-heading">
-            <div><h3>Recent Referrals</h3><p>Latest patient handovers.</p></div>
-            <button className="text-action" onClick={() => onNavigate("Referrals")}>View all <ArrowUpRight size={14} /></button>
+            <div>
+              <h3>Recent Referrals</h3>
+              <p>Latest patient handovers from the database.</p>
+            </div>
+            <button className="text-action" onClick={() => onNavigate("Referrals")}>
+              View all <ArrowUpRight size={14} />
+            </button>
           </div>
+
           <div className="dashboard-table-scroll">
             <table className="referral-table">
-              <thead><tr><th>PATIENT</th><th>REFERRAL REASON</th><th>STATUS</th><th>PRIORITY</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>PATIENT</th>
+                  <th>REFERRAL REASON</th>
+                  <th>STATUS</th>
+                  <th>PRIORITY</th>
+                </tr>
+              </thead>
               <tbody>
-                {records.map((r) => (
-                  <tr key={r.id}>
-                    <td><strong>{r.name}</strong><span className="table-subtext">{r.id}</span></td>
-                    <td>{r.reason}</td>
-                    <td><span className={`status-badge ${r.status === "Pending" ? "pending" : "success"}`}>{r.status}</span></td>
-                    <td><span className={`priority ${r.priority === "Urgent" ? "high" : "normal"}`}>{r.priority}</span></td>
+                {loading ? (
+                  <tr>
+                    <td colSpan="4">Loading referrals...</td>
                   </tr>
-                ))}
+                ) : recentReferrals.length === 0 ? (
+                  <tr>
+                    <td colSpan="4">No referrals found. Create your first referral!</td>
+                  </tr>
+                ) : (
+                  recentReferrals.map((r) => {
+                    const status = r.status || "Pending";
+                    const priority = r.priority || "Normal";
+
+                    return (
+                      <tr key={r.id || r.referral_id}>
+                        <td>
+                          <strong>{r.patient_name || "Unknown Patient"}</strong>
+                          <span className="table-subtext">{r.referral_id}</span>
+                        </td>
+                        <td>{r.reason || "Not specified"}</td>
+                        <td>
+                          <span className={`status-badge ${
+                            ["pending", "received", "in review"].includes(getStatus(status))
+                              ? "pending"
+                              : getStatus(status) === "rejected"
+                              ? "rejected"
+                              : "success"
+                          }`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`priority ${
+                            getStatus(priority) === "urgent" ? "high" : "normal"
+                          }`}>
+                            {priority}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
         <div className="panel activity-panel">
-          <div className="panel-heading"><div><h3>Weekly Activity</h3><p>Sample referral activity.</p></div></div>
-          <div className="activity-highlight"><strong>36</strong><span>Referrals this week</span></div>
-          <div className="weekly-chart">
-            {[55, 75, 45, 90, 65, 35, 50].map((height, i) => (
-              <div className="chart-column" key={i}>
-                <div className="chart-track"><div className="chart-bar" style={{ height: `${height}%` }} /></div>
-                <span>{"MTWTFSS"[i]}</span>
-              </div>
-            ))}
+          <div className="panel-heading">
+            <div>
+              <h3>Referral Overview</h3>
+              <p>Current database status.</p>
+            </div>
+          </div>
+
+          <div className="activity-highlight">
+            <strong>{loading ? "..." : referrals.length}</strong>
+            <span>Total referrals</span>
+          </div>
+
+          <div style={{ display: "grid", gap: "14px", marginTop: "20px" }}>
+            <div>
+              <span style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Pending / In Review</span>
+                <strong>{loading ? "..." : pendingCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Accepted</span>
+                <strong>{loading ? "..." : acceptedCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Rejected</span>
+                <strong>{loading ? "..." : rejectedCount}</strong>
+              </span>
+            </div>
+            <div>
+              <span style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Urgent</span>
+                <strong>{loading ? "..." : urgentCount}</strong>
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="panel quick-panel">
-        <div className="panel-heading"><div><h3>Quick Actions</h3><p>Frequently used tools.</p></div></div>
+        <div className="panel-heading">
+          <div><h3>Quick Actions</h3><p>Frequently used tools.</p></div>
+        </div>
         <div className="quick-actions">
           <button onClick={() => onNavigate("Referrals")}><Plus size={18} /> New Referral</button>
           <button onClick={() => onNavigate("Patients")}><Users size={18} /> View Patients</button>
@@ -228,7 +403,9 @@ function Dashboard({ onNavigate }) {
         </div>
       </section>
 
-      <p className="demo-disclaimer"><ShieldCheck size={16} /> SETU prototype · Fictional sample data only.</p>
+      <p className="demo-disclaimer">
+        <ShieldCheck size={16} /> SETU prototype · Use fictional sample data only.
+      </p>
     </>
   );
 }
