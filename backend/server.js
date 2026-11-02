@@ -5,13 +5,18 @@ const cors = require("cors");
 // Import database connection
 const db = require("./config/database");
 
-// Import referral routes
+// Import API routes
+const patientRoutes = require("./routes/patientRoutes");
 const referralRoutes = require("./routes/referralRoutes");
+
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:5173"
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:5174"
+  ]
 }));
 
 app.use(express.json());
@@ -24,9 +29,8 @@ app.get("/", (req, res) => {
   });
 });
 
-// Referral API routes
-app.use("/api/referrals", referralRoutes);
-// Referral API routes
+// API routes
+app.use("/api/patients", patientRoutes);
 app.use("/api/referrals", referralRoutes);
 
 // Handle invalid routes
@@ -45,5 +49,6 @@ app.listen(PORT, () => {
   console.log("SETU Backend Started Successfully");
   console.log(`Server: http://localhost:${PORT}`);
   console.log(`Patients API: http://localhost:${PORT}/api/patients`);
+  console.log(`Referrals API: http://localhost:${PORT}/api/referrals`);
   console.log("--------------------------------");
 });

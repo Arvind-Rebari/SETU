@@ -19,59 +19,13 @@ db.exec(`
 
 // Demo referral records
 const demoReferrals = [
-  [
-    "SETU-1024",
-    "Ananya Sharma",
-    34,
-    "Sunrise Clinic",
-    "Cardiology consultation",
-    "01 Nov 2026",
-    "Received",
-    "Normal"
-  ],
-  [
-    "SETU-1025",
-    "Rahul Mehta",
-    48,
-    "City Health Centre",
-    "Orthopaedic referral",
-    "01 Nov 2026",
-    "Pending",
-    "Urgent"
-  ],
-  [
-    "SETU-1026",
-    "Priya Nair",
-    29,
-    "Green Life Hospital",
-    "General medicine",
-    "31 Oct 2026",
-    "Accepted",
-    "Normal"
-  ],
-  [
-    "SETU-1027",
-    "Vikram Patel",
-    56,
-    "Wellness Medical",
-    "Neurology consultation",
-    "31 Oct 2026",
-    "In Review",
-    "Urgent"
-  ],
-  [
-    "SETU-1028",
-    "Meera Joshi",
-    41,
-    "Sunrise Clinic",
-    "General check-up",
-    "30 Oct 2026",
-    "Rejected",
-    "Normal"
-  ]
+  ["SETU-1024", "Ananya Sharma", 34, "Sunrise Clinic", "Cardiology consultation", "01 Nov 2026", "Received", "Normal"],
+  ["SETU-1025", "Rahul Mehta", 48, "City Health Centre", "Orthopaedic referral", "01 Nov 2026", "Accepted", "Urgent"],
+  ["SETU-1026", "Priya Nair", 29, "Green Life Hospital", "General medicine", "31 Oct 2026", "Accepted", "Normal"],
+  ["SETU-1027", "Vikram Patel", 56, "Wellness Medical", "Neurology consultation", "31 Oct 2026", "In Review", "Urgent"],
+  ["SETU-1028", "Meera Joshi", 41, "Sunrise Clinic", "General check-up", "30 Oct 2026", "In Review", "Normal"]
 ];
 
-// Insert demo records only once
 const insertReferral = db.prepare(`
   INSERT OR IGNORE INTO referrals (
     referral_id,
@@ -97,23 +51,46 @@ seedReferrals();
 // Get all referrals
 function getAllReferrals() {
   return db.prepare(`
-    SELECT * FROM referrals
-    ORDER BY id DESC
+    SELECT
+      r.*,
+      p.patient_id AS patient_code
+    FROM referrals r
+    LEFT JOIN patients p
+      ON p.id = r.patient_database_id
+    ORDER BY r.id DESC
   `).all();
 }
 
-// Get referral by database ID
+// Get one referral
 function getReferralById(id) {
   return db.prepare(`
-    SELECT * FROM referrals
-    WHERE id = ?
+    SELECT
+      r.*,
+      p.patient_id AS patient_code
+    FROM referrals r
+    LEFT JOIN patients p
+      ON p.id = r.patient_database_id
+    WHERE r.id = ?
   `).get(id);
 }
 
-// Create referral
+// Create referral using an existing patient
 function createReferral(referral) {
+  // Fetch selected patient
+  const patient = db.prepare(`
+    SELECT id, patient_id, name, age
+    FROM patients
+    WHERE id = ?
+  `).get(referral.patient_database_id);
+
+  if (!patient) {
+    throw new Error("Selected patient not found.");
+  }
+
+  // Insert referral with patient details
   const insert = db.prepare(`
     INSERT INTO referrals (
+      patient_database_id,
       referral_id,
       patient_name,
       patient_age,
@@ -122,17 +99,18 @@ function createReferral(referral) {
       referral_date,
       priority
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = insert.run(
+    patient.id,
     referral.referral_id,
-    referral.patient_name,
-    referral.patient_age,
+    patient.name,
+    patient.age,
     referral.referring_clinic,
     referral.reason,
     referral.referral_date,
-    referral.priority
+    referral.priority || "Normal"
   );
 
   return getReferralById(result.lastInsertRowid);

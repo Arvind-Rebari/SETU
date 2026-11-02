@@ -1,145 +1,282 @@
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Plus, Search, Filter, ClipboardList, Clock3,
-  CheckCircle2, AlertCircle, Eye, X
-} from "lucide-react";
 
-const API_URL = "http://localhost:5000/api/referrals";
+const REFERRALS_API = "http://localhost:5000/api/referrals";
+const PATIENTS_API = "http://localhost:5000/api/patients";
 
-// Convert database records into frontend format
-function formatReferral(referral) {
-  return {
-    databaseId: referral.id,
-    id: referral.referral_id,
-    name: referral.patient_name,
-    age: referral.patient_age,
-    clinic: referral.referring_clinic,
-    reason: referral.reason,
-    date: referral.referral_date,
-    status: referral.status,
-    priority: referral.priority
+const styles = {
+  page: {
+    padding: "24px",
+    color: "#183b35",
+    fontFamily: "Arial, sans-serif",
+    maxWidth: "1200px",
+    margin: "0 auto"
+  },
+  heading: {
+    fontSize: "28px",
+    fontWeight: "700",
+    marginBottom: "8px"
+  },
+  subtitle: {
+    color: "#71847f",
+    marginBottom: "24px"
+  },
+  stats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: "14px",
+    marginBottom: "24px"
+  },
+  card: {
+    background: "#ffffff",
+    border: "1px solid #e1ece8",
+    borderRadius: "12px",
+    padding: "18px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+  },
+  cardLabel: {
+    color: "#71847f",
+    fontSize: "13px",
+    marginBottom: "8px"
+  },
+  cardValue: {
+    fontSize: "26px",
+    fontWeight: "700"
+  },
+  toolbar: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "12px",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "18px"
+  },
+  input: {
+    width: "100%",
+    padding: "11px 12px",
+    border: "1px solid #d7e4df",
+    borderRadius: "8px",
+    fontSize: "14px",
+    boxSizing: "border-box",
+    background: "#ffffff"
+  },
+  button: {
+    background: "#16856b",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "8px",
+    padding: "11px 18px",
+    fontWeight: "600",
+    cursor: "pointer"
+  },
+  secondaryButton: {
+    background: "#e9f5f1",
+    color: "#16856b",
+    border: "none",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontWeight: "600"
+  },
+  tableWrapper: {
+    overflowX: "auto",
+    background: "#ffffff",
+    border: "1px solid #e1ece8",
+    borderRadius: "12px"
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: "750px"
+  },
+  th: {
+    textAlign: "left",
+    padding: "14px",
+    background: "#f2f8f5",
+    color: "#58736a",
+    fontSize: "12px",
+    textTransform: "uppercase",
+    borderBottom: "1px solid #e1ece8"
+  },
+  td: {
+    padding: "14px",
+    borderBottom: "1px solid #edf2ef",
+    fontSize: "13px"
+  },
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "16px",
+    zIndex: 1000
+  },
+  modal: {
+    background: "#ffffff",
+    borderRadius: "14px",
+    padding: "24px",
+    width: "100%",
+    maxWidth: "520px",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    boxSizing: "border-box"
+  },
+  label: {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: "600",
+    marginBottom: "7px",
+    color: "#36564c"
+  },
+  field: {
+    marginBottom: "16px"
+  }
+};
+
+function getStatusColor(status) {
+  const colors = {
+    Received: "#16856b",
+    Pending: "#b7791f",
+    "In Review": "#2563a6",
+    Accepted: "#16856b",
+    Rejected: "#c0392b"
   };
+
+  return colors[status] || "#71847f";
 }
 
 export default function Referrals() {
   const [referrals, setReferrals] = useState([]);
-
+  const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("All");
-
-  const [showForm, setShowForm] = useState(false);
-  const [selected, setSelected] = useState(null);
-
+  const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [updating, setUpdating] = useState(false);
-
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const [form, setForm] = useState({
-    name: "",
-    age: "",
-    clinic: "",
+    patient_database_id: "",
+    referring_clinic: "",
     reason: "",
     priority: "Normal"
   });
 
-  // Fetch referrals from SQLite
   async function fetchReferrals() {
+    const response = await fetch(REFERRALS_API);
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Unable to load referrals.");
+    }
+
+    setReferrals(data.referrals || []);
+  }
+
+  async function fetchPatients() {
+    const response = await fetch(PATIENTS_API);
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Unable to load patients.");
+    }
+
+    setPatients(data.patients || []);
+  }
+
+  async function loadData() {
+    setLoading(true);
+    setError("");
+
     try {
-      setLoading(true);
-      setError("");
-
-      const response = await fetch(API_URL);
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Unable to load referrals.");
-      }
-
-      setReferrals(data.referrals.map(formatReferral));
-
+      await Promise.all([fetchReferrals(), fetchPatients()]);
     } catch (err) {
-      console.error("Fetch referrals error:", err);
-      setError(
-        "Unable to connect to SETU referral service. Check that your backend is running."
-      );
+      setError(err.message || "Unable to load SETU data.");
     } finally {
       setLoading(false);
     }
   }
 
-  // Load referrals when page opens
   useEffect(() => {
-    fetchReferrals();
+    loadData();
   }, []);
 
-  // Search and filter
-  const filtered = useMemo(() => {
-    return referrals.filter((r) => {
-      const searchText = search.toLowerCase();
+  const selectedPatient = patients.find(
+    (patient) =>
+      String(patient.id) === String(form.patient_database_id)
+  );
 
-      const matchesSearch =
-        `${r.name} ${r.id} ${r.clinic} ${r.reason}`
-          .toLowerCase()
-          .includes(searchText);
+  const filteredReferrals = useMemo(() => {
+    const query = search.toLowerCase().trim();
 
-      const matchesFilter =
-        filter === "All" || r.status === filter;
+    if (!query) return referrals;
 
-      return matchesSearch && matchesFilter;
-    });
-  }, [referrals, search, filter]);
+    return referrals.filter((referral) =>
+      [
+        referral.referral_id,
+        referral.patient_name,
+        referral.referring_clinic,
+        referral.reason,
+        referral.status,
+        referral.priority
+      ]
+        .filter(Boolean)
+        .some((value) =>
+          String(value).toLowerCase().includes(query)
+        )
+    );
+  }, [referrals, search]);
 
-  // Update form fields
-  function updateForm(e) {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value
-    });
+  const stats = {
+    total: referrals.length,
+    pending: referrals.filter(
+      (item) => item.status === "Pending" || item.status === "Received"
+    ).length,
+    accepted: referrals.filter(
+      (item) => item.status === "Accepted"
+    ).length,
+    urgent: referrals.filter(
+      (item) => item.priority === "Urgent"
+    ).length
+  };
+
+  function handleFormChange(event) {
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value
+    }));
   }
 
-  // Reset form
-  function resetForm() {
-    setForm({
-      name: "",
-      age: "",
-      clinic: "",
-      reason: "",
-      priority: "Normal"
-    });
-  }
+  async function createReferral(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
 
-  // Show success message
-  function showSuccess(text) {
-    setMessage(text);
+    if (!form.patient_database_id) {
+      setError("Please select a patient.");
+      return;
+    }
 
-    setTimeout(() => {
-      setMessage("");
-    }, 3000);
-  }
+    if (!form.referring_clinic.trim() || !form.reason.trim()) {
+      setError("Please complete all required fields.");
+      return;
+    }
 
-  // Create referral in database
-  async function createReferral(e) {
-    e.preventDefault();
-
-    if (saving) return;
+    setSaving(true);
 
     try {
-      setSaving(true);
-      setError("");
-
-      const response = await fetch(API_URL, {
+      const response = await fetch(REFERRALS_API, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          patient_name: form.name.trim(),
-          patient_age: Number(form.age),
-          referring_clinic: form.clinic.trim(),
+          patient_database_id: Number(form.patient_database_id),
+          referring_clinic: form.referring_clinic.trim(),
           reason: form.reason.trim(),
           priority: form.priority
         })
@@ -151,44 +288,35 @@ export default function Referrals() {
         throw new Error(data.message || "Unable to create referral.");
       }
 
-      const newReferral = formatReferral(data.referral);
+      setMessage("Referral created successfully!");
+      setForm({
+        patient_database_id: "",
+        referring_clinic: "",
+        reason: "",
+        priority: "Normal"
+      });
 
-      setReferrals((previous) => [
-        newReferral,
-        ...previous
-      ]);
-
-      resetForm();
-      setShowForm(false);
-
-      showSuccess("New referral created and saved successfully.");
-
+      setShowModal(false);
+      await fetchReferrals();
     } catch (err) {
-      console.error("Create referral error:", err);
       setError(err.message || "Unable to create referral.");
     } finally {
       setSaving(false);
     }
   }
 
-  // Update referral status in database
-  async function changeStatus(referral, status) {
-    if (updating) return;
+  async function updateReferralStatus(id, status) {
+    setError("");
+    setMessage("");
 
     try {
-      setUpdating(true);
-      setError("");
-
-      const response = await fetch(
-        `${API_URL}/${referral.databaseId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ status })
-        }
-      );
+      const response = await fetch(`${REFERRALS_API}/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ status })
+      });
 
       const data = await response.json();
 
@@ -196,497 +324,340 @@ export default function Referrals() {
         throw new Error(data.message || "Unable to update status.");
       }
 
-      const updatedReferral = formatReferral(data.referral);
-
-      setReferrals((previous) =>
-        previous.map((r) =>
-          r.databaseId === updatedReferral.databaseId
-            ? updatedReferral
-            : r
-        )
-      );
-
-      setSelected(null);
-
-      showSuccess(`Referral status updated to ${status}.`);
-
+      await fetchReferrals();
+      setMessage("Referral status updated successfully.");
     } catch (err) {
-      console.error("Update referral error:", err);
       setError(err.message || "Unable to update referral status.");
-    } finally {
-      setUpdating(false);
     }
   }
 
-  // Statistics
-  const counts = {
-    All: referrals.length,
-    Received: referrals.filter(r => r.status === "Received").length,
-    Pending: referrals.filter(r => r.status === "Pending").length,
-    Accepted: referrals.filter(r => r.status === "Accepted").length,
-    Urgent: referrals.filter(r => r.priority === "Urgent").length
-  };
-
   return (
-    <div className="page-content referrals-page">
+    <div style={styles.page}>
+      <div style={styles.heading}>Referrals</div>
 
-      {/* Page heading */}
-      <div className="referrals-title-row">
-        <div>
-          <span className="referrals-eyebrow">
-            CARE COORDINATION
-          </span>
-
-          <h2>Patient Referrals</h2>
-
-          <p>
-            Send, receive and manage patient referrals in one place.
-          </p>
-        </div>
-
-        <button
-          className="new-referral-btn"
-          onClick={() => {
-            setError("");
-            setShowForm(true);
-          }}
-        >
-          <Plus size={18} /> New referral
-        </button>
+      <div style={styles.subtitle}>
+        Manage patient referrals and track their progress.
       </div>
 
-      {/* Messages */}
-      {message && (
-        <div className="referral-message">
-          <CheckCircle2 size={17} /> {message}
+      <div style={styles.stats}>
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Total Referrals</div>
+          <div style={styles.cardValue}>{stats.total}</div>
         </div>
-      )}
 
-      {error && (
-        <div
-          role="alert"
-          style={{
-            background: "#fff1f2",
-            color: "#be123c",
-            padding: "12px 16px",
-            borderRadius: "10px",
-            marginBottom: "16px",
-            fontSize: "14px"
-          }}
-        >
-          {error}
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Pending / Received</div>
+          <div style={styles.cardValue}>{stats.pending}</div>
+        </div>
+
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Accepted</div>
+          <div style={styles.cardValue}>{stats.accepted}</div>
+        </div>
+
+        <div style={styles.card}>
+          <div style={styles.cardLabel}>Urgent Referrals</div>
+          <div style={styles.cardValue}>{stats.urgent}</div>
+        </div>
+      </div>
+
+      <div style={styles.toolbar}>
+        <input
+          type="text"
+          placeholder="Search patient, referral ID, clinic..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          style={{ ...styles.input, maxWidth: "380px" }}
+        />
+
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={loadData}
+          >
+            Refresh
+          </button>
 
           <button
             type="button"
-            onClick={fetchReferrals}
-            style={{
-              marginLeft: "12px",
-              background: "none",
-              border: "none",
-              color: "inherit",
-              textDecoration: "underline",
-              cursor: "pointer"
+            style={styles.button}
+            onClick={() => {
+              setError("");
+              setMessage("");
+              setShowModal(true);
             }}
           >
-            Retry
+            + New Referral
           </button>
         </div>
-      )}
-
-      {loading && (
-        <p style={{ color: "#64748b", marginBottom: "16px" }}>
-          Loading referrals from database...
-        </p>
-      )}
-
-      {/* Statistics */}
-      <div className="referral-stats">
-
-        <div className="referral-stat">
-          <span className="referral-stat-icon total">
-            <ClipboardList />
-          </span>
-          <span>Total referrals</span>
-          <strong>{counts.All}</strong>
-        </div>
-
-        <div className="referral-stat">
-          <span className="referral-stat-icon received">
-            <CheckCircle2 />
-          </span>
-          <span>Received</span>
-          <strong>{counts.Received}</strong>
-        </div>
-
-        <div className="referral-stat">
-          <span className="referral-stat-icon pending">
-            <Clock3 />
-          </span>
-          <span>Pending</span>
-          <strong>{counts.Pending}</strong>
-        </div>
-
-        <div className="referral-stat">
-          <span className="referral-stat-icon urgent">
-            <AlertCircle />
-          </span>
-          <span>Urgent cases</span>
-          <strong>{counts.Urgent}</strong>
-        </div>
-
       </div>
 
-      {/* Referral table */}
-      <section className="referrals-card">
-
-        <div className="referrals-card-heading">
-          <div>
-            <h3>All referrals</h3>
-            <p>Find and review patient referral requests.</p>
-          </div>
-
-          <span className="record-count">
-            {filtered.length} records
-          </span>
+      {error && (
+        <div
+          style={{
+            background: "#fff0ef",
+            color: "#b42318",
+            padding: "12px",
+            borderRadius: "8px",
+            marginBottom: "14px"
+          }}
+        >
+          {error}
         </div>
+      )}
 
-        <div className="referrals-tools">
-
-          <label className="referrals-search">
-            <Search size={17} />
-
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search patient or referral ID..."
-            />
-          </label>
-
-          <label className="filter-select">
-            <Filter size={16} />
-
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              {[
-                "All",
-                "Received",
-                "Pending",
-                "In Review",
-                "Accepted",
-                "Rejected"
-              ].map(status => (
-                <option key={status} value={status}>
-                  {status === "All" ? "All statuses" : status}
-                </option>
-              ))}
-            </select>
-          </label>
-
+      {message && (
+        <div
+          style={{
+            background: "#e9f7ef",
+            color: "#16856b",
+            padding: "12px",
+            borderRadius: "8px",
+            marginBottom: "14px"
+          }}
+        >
+          {message}
         </div>
+      )}
 
-        <div className="referrals-table-scroll">
-
-          <table className="referrals-list-table">
-
+      <div style={styles.tableWrapper}>
+        {loading ? (
+          <p style={{ padding: "24px" }}>Loading referrals...</p>
+        ) : filteredReferrals.length === 0 ? (
+          <p style={{ padding: "24px", color: "#71847f" }}>
+            No referrals found.
+          </p>
+        ) : (
+          <table style={styles.table}>
             <thead>
               <tr>
-                <th>REFERRAL / PATIENT</th>
-                <th>REFERRED BY</th>
-                <th>REASON</th>
-                <th>STATUS</th>
-                <th>PRIORITY</th>
-                <th>DATE</th>
-                <th>ACTION</th>
+                <th style={styles.th}>Referral ID</th>
+                <th style={styles.th}>Patient</th>
+                <th style={styles.th}>Clinic</th>
+                <th style={styles.th}>Reason</th>
+                <th style={styles.th}>Priority</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Update Status</th>
               </tr>
             </thead>
 
             <tbody>
-
-              {filtered.map((r) => (
-                <tr key={r.id}>
-
-                  <td>
-                    <strong>{r.name}</strong>
-                    <span className="table-subtext">
-                      {r.id} · Age {r.age}
-                    </span>
+              {filteredReferrals.map((referral) => (
+                <tr key={referral.id}>
+                  <td style={styles.td}>
+                    <strong>{referral.referral_id}</strong>
                   </td>
 
-                  <td>{r.clinic}</td>
+                  <td style={styles.td}>
+                    <strong>{referral.patient_name}</strong>
+                    <div style={{ color: "#71847f", marginTop: "4px" }}>
+                      Age: {referral.patient_age}
+                    </div>
+                  </td>
 
-                  <td>{r.reason}</td>
+                  <td style={styles.td}>
+                    {referral.referring_clinic}
+                  </td>
 
-                  <td>
+                  <td style={styles.td}>{referral.reason}</td>
+
+                  <td style={styles.td}>
                     <span
-                      className={`ref-status ${r.status.toLowerCase().replace(" ", "-")}`}
+                      style={{
+                        color:
+                          referral.priority === "Urgent"
+                            ? "#c0392b"
+                            : "#16856b",
+                        fontWeight: "700"
+                      }}
                     >
-                      {r.status}
+                      {referral.priority}
                     </span>
                   </td>
 
-                  <td>
+                  <td style={styles.td}>
                     <span
-                      className={`ref-priority ${r.priority.toLowerCase()}`}
+                      style={{
+                        color: getStatusColor(referral.status),
+                        fontWeight: "700"
+                      }}
                     >
-                      ● {r.priority}
+                      {referral.status}
                     </span>
                   </td>
 
-                  <td>{r.date}</td>
-
-                  <td>
-                    <button
-                      className="view-referral-btn"
-                      onClick={() => setSelected(r)}
+                  <td style={styles.td}>
+                    <select
+                      value={referral.status}
+                      onChange={(event) =>
+                        updateReferralStatus(
+                          referral.id,
+                          event.target.value
+                        )
+                      }
+                      style={{ ...styles.input, minWidth: "125px" }}
                     >
-                      <Eye size={15} /> View
-                    </button>
+                      <option value="Received">Received</option>
+                      <option value="Pending">Pending</option>
+                      <option value="In Review">In Review</option>
+                      <option value="Accepted">Accepted</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
                   </td>
-
                 </tr>
               ))}
-
-              {!loading && filtered.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="referrals-empty">
-                    No referrals found. Try another search or filter.
-                  </td>
-                </tr>
-              )}
-
             </tbody>
-
           </table>
+        )}
+      </div>
 
-        </div>
-
-      </section>
-
-      {/* Create referral modal */}
-      {showForm && (
+      {showModal && (
         <div
-          className="referral-modal-backdrop"
-          onClick={() => setShowForm(false)}
+          style={styles.modalOverlay}
+          onClick={() => !saving && setShowModal(false)}
         >
-          <section
-            className="referral-modal"
-            onClick={(e) => e.stopPropagation()}
+          <div
+            style={styles.modal}
+            onClick={(event) => event.stopPropagation()}
           >
+            <h2 style={{ marginTop: 0 }}>Create New Referral</h2>
 
-            <div className="modal-heading">
-              <div>
-                <h3>Create a new referral</h3>
-                <p>Enter the basic patient and referral details.</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                aria-label="Close form"
-              >
-                <X />
-              </button>
-            </div>
+            <p style={{ color: "#71847f", fontSize: "13px" }}>
+              Select an existing patient from the SETU database.
+            </p>
 
             <form onSubmit={createReferral}>
+              <div style={styles.field}>
+                <label style={styles.label}>Select Patient *</label>
 
-              <label>
-                Patient full name
+                <select
+                  name="patient_database_id"
+                  value={form.patient_database_id}
+                  onChange={handleFormChange}
+                  required
+                  style={styles.input}
+                >
+                  <option value="">Choose a patient</option>
+
+                  {patients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name} — {patient.patient_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedPatient && (
+                <div
+                  style={{
+                    background: "#f0f8f5",
+                    borderRadius: "8px",
+                    padding: "12px",
+                    marginBottom: "16px",
+                    fontSize: "13px",
+                    lineHeight: 1.8
+                  }}
+                >
+                  <strong>Selected Patient Details</strong>
+                  <div>Name: {selectedPatient.name}</div>
+                  <div>Age: {selectedPatient.age}</div>
+                  <div>Patient ID: {selectedPatient.patient_id}</div>
+                  <div>Phone: {selectedPatient.phone}</div>
+                </div>
+              )}
+
+              <div style={styles.field}>
+                <label style={styles.label}>Referring Clinic *</label>
 
                 <input
-                  name="name"
-                  value={form.name}
-                  onChange={updateForm}
-                  placeholder="Enter patient name"
+                  name="referring_clinic"
+                  type="text"
+                  value={form.referring_clinic}
+                  onChange={handleFormChange}
+                  placeholder="Enter referring clinic"
                   required
+                  style={styles.input}
                 />
-              </label>
+              </div>
 
-              <label>
-                Patient age
-
-                <input
-                  name="age"
-                  type="number"
-                  min="1"
-                  max="120"
-                  value={form.age}
-                  onChange={updateForm}
-                  placeholder="Enter age"
-                  required
-                />
-              </label>
-
-              <label>
-                Referring clinic
-
-                <input
-                  name="clinic"
-                  value={form.clinic}
-                  onChange={updateForm}
-                  placeholder="Enter clinic name"
-                  required
-                />
-              </label>
-
-              <label>
-                Reason for referral
+              <div style={styles.field}>
+                <label style={styles.label}>Reason for Referral *</label>
 
                 <textarea
                   name="reason"
                   value={form.reason}
-                  onChange={updateForm}
-                  placeholder="Explain why the patient is being referred"
+                  onChange={handleFormChange}
+                  placeholder="Enter reason for referral"
                   required
+                  rows={4}
+                  style={{
+                    ...styles.input,
+                    resize: "vertical"
+                  }}
                 />
-              </label>
+              </div>
 
-              <label>
-                Priority
+              <div style={styles.field}>
+                <label style={styles.label}>Priority *</label>
 
                 <select
                   name="priority"
                   value={form.priority}
-                  onChange={updateForm}
+                  onChange={handleFormChange}
+                  style={styles.input}
                 >
-                  <option>Normal</option>
-                  <option>Urgent</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Urgent">Urgent</option>
                 </select>
-              </label>
-
-              <div className="modal-notice">
-                Demo only: do not enter real patient or medical information.
               </div>
 
-              <button
-                className="new-referral-btn modal-submit"
-                type="submit"
-                disabled={saving}
-              >
-                <Plus size={17} />
-                {saving ? "Saving referral..." : "Create demo referral"}
-              </button>
-
-            </form>
-
-          </section>
-        </div>
-      )}
-
-      {/* Referral details modal */}
-      {selected && (
-        <div
-          className="referral-modal-backdrop"
-          onClick={() => !updating && setSelected(null)}
-        >
-          <section
-            className="referral-modal detail-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-
-            <div className="modal-heading">
-
-              <div>
-                <span className="referrals-eyebrow">
-                  REFERRAL DETAILS
-                </span>
-
-                <h3>{selected.name}</h3>
-
-                <p>
-                  {selected.id} · Age {selected.age}
+              {error && (
+                <p style={{ color: "#b42318", fontSize: "13px" }}>
+                  {error}
                 </p>
-              </div>
+              )}
 
-              <button
-                onClick={() => setSelected(null)}
-                disabled={updating}
-                aria-label="Close details"
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                  marginTop: "20px"
+                }}
               >
-                <X />
-              </button>
-
-            </div>
-
-            <div className="detail-list">
-
-              <p>
-                <strong>Referring clinic</strong>
-                <span>{selected.clinic}</span>
-              </p>
-
-              <p>
-                <strong>Referral reason</strong>
-                <span>{selected.reason}</span>
-              </p>
-
-              <p>
-                <strong>Date</strong>
-                <span>{selected.date}</span>
-              </p>
-
-              <p>
-                <strong>Priority</strong>
-                <span className={`ref-priority ${selected.priority.toLowerCase()}`}>
-                  {selected.priority}
-                </span>
-              </p>
-
-              <p>
-                <strong>Current status</strong>
-                <span
-                  className={`ref-status ${selected.status.toLowerCase().replace(" ", "-")}`}
+                <button
+                  type="button"
+                  style={styles.secondaryButton}
+                  disabled={saving}
+                  onClick={() => setShowModal(false)}
                 >
-                  {selected.status}
-                </span>
-              </p>
+                  Cancel
+                </button>
 
-            </div>
-
-            <p className="detail-help">
-              Demo workflow: update the referral status to test the interface.
-            </p>
-
-            {error && (
-              <p role="alert" style={{ color: "#be123c", fontSize: "13px" }}>
-                {error}
-              </p>
-            )}
-
-            <div className="detail-actions">
-
-              <button
-                onClick={() => changeStatus(selected, "Accepted")}
-                className="accept-btn"
-                disabled={updating}
-              >
-                {updating ? "Updating..." : "Accept"}
-              </button>
-
-              <button
-                onClick={() => changeStatus(selected, "In Review")}
-                className="review-btn"
-                disabled={updating}
-              >
-                In Review
-              </button>
-
-              <button
-                onClick={() => changeStatus(selected, "Rejected")}
-                className="reject-btn"
-                disabled={updating}
-              >
-                Reject
-              </button>
-
-            </div>
-
-          </section>
+                <button
+                  type="submit"
+                  style={styles.button}
+                  disabled={saving}
+                >
+                  {saving ? "Creating..." : "Create Referral"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
+      <p
+        style={{
+          fontSize: "12px",
+          color: "#8a9994",
+          marginTop: "18px"
+        }}
+      >
+        SETU is currently a demonstration prototype. Do not enter real
+        patient or medical information.
+      </p>
     </div>
   );
 }

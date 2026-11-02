@@ -49,39 +49,35 @@ function getReferral(req, res) {
   }
 }
 
-// POST: Create a new referral
+// POST: Create a new referral using an existing patient
 function addReferral(req, res) {
   try {
     const {
-      patient_name,
-      patient_age,
+      patient_database_id,
       referring_clinic,
       reason,
       priority
     } = req.body;
 
-    // Required field validation
+    // Validate patient database ID
     if (
-      !patient_name ||
-      !patient_age ||
-      !referring_clinic ||
-      !reason
+      !Number.isInteger(Number(patient_database_id)) ||
+      Number(patient_database_id) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid patient."
+      });
+    }
+
+    // Validate required fields
+    if (
+      !String(referring_clinic || "").trim() ||
+      !String(reason || "").trim()
     ) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required referral details."
-      });
-    }
-
-    // Validate patient age
-    if (
-      !Number.isInteger(Number(patient_age)) ||
-      Number(patient_age) < 1 ||
-      Number(patient_age) > 120
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Patient age must be between 1 and 120."
       });
     }
 
@@ -94,9 +90,8 @@ function addReferral(req, res) {
     }
 
     const referral = Referral.createReferral({
+      patient_database_id: Number(patient_database_id),
       referral_id: `SETU-${Date.now()}`,
-      patient_name: String(patient_name).trim(),
-      patient_age: Number(patient_age),
       referring_clinic: String(referring_clinic).trim(),
       reason: String(reason).trim(),
       referral_date: new Date().toLocaleDateString("en-IN", {
@@ -115,6 +110,13 @@ function addReferral(req, res) {
 
   } catch (error) {
     console.error("Create referral error:", error);
+
+    if (error.message === "Selected patient not found.") {
+      return res.status(404).json({
+        success: false,
+        message: "Selected patient was not found."
+      });
+    }
 
     res.status(500).json({
       success: false,
