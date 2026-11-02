@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const REFERRALS_API = "http://localhost:5000/api/referrals";
 const PATIENTS_API = "http://localhost:5000/api/patients";
+const CLINICS_API = "http://localhost:5000/api/clinics";
 
 const styles = {
   page: {
@@ -87,7 +88,7 @@ const styles = {
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: "750px"
+    minWidth: "850px"
   },
   th: {
     textAlign: "left",
@@ -150,6 +151,7 @@ function getStatusColor(status) {
 export default function Referrals() {
   const [referrals, setReferrals] = useState([]);
   const [patients, setPatients] = useState([]);
+  const [clinics, setClinics] = useState([]);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -160,6 +162,7 @@ export default function Referrals() {
   const [form, setForm] = useState({
     patient_database_id: "",
     referring_clinic: "",
+    receiving_clinic_id: "",
     reason: "",
     priority: "Normal"
   });
@@ -186,12 +189,27 @@ export default function Referrals() {
     setPatients(data.patients || []);
   }
 
+  async function fetchClinics() {
+    const response = await fetch(CLINICS_API);
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Unable to load clinics.");
+    }
+
+    setClinics(data.clinics || []);
+  }
+
   async function loadData() {
     setLoading(true);
     setError("");
 
     try {
-      await Promise.all([fetchReferrals(), fetchPatients()]);
+      await Promise.all([
+        fetchReferrals(),
+        fetchPatients(),
+        fetchClinics()
+      ]);
     } catch (err) {
       setError(err.message || "Unable to load SETU data.");
     } finally {
@@ -208,16 +226,26 @@ export default function Referrals() {
       String(patient.id) === String(form.patient_database_id)
   );
 
+  const clinicNames = useMemo(() => {
+    return Object.fromEntries(
+      clinics.map((clinic) => [String(clinic.id), clinic.name])
+    );
+  }, [clinics]);
+
   const filteredReferrals = useMemo(() => {
     const query = search.toLowerCase().trim();
 
     if (!query) return referrals;
 
-    return referrals.filter((referral) =>
-      [
+    return referrals.filter((referral) => {
+      const receivingClinic =
+        clinicNames[String(referral.receiving_clinic_id)] || "";
+
+      return [
         referral.referral_id,
         referral.patient_name,
         referral.referring_clinic,
+        receivingClinic,
         referral.reason,
         referral.status,
         referral.priority
@@ -225,9 +253,9 @@ export default function Referrals() {
         .filter(Boolean)
         .some((value) =>
           String(value).toLowerCase().includes(query)
-        )
-    );
-  }, [referrals, search]);
+        );
+    });
+  }, [referrals, search, clinicNames]);
 
   const stats = {
     total: referrals.length,
@@ -261,6 +289,11 @@ export default function Referrals() {
       return;
     }
 
+    if (!form.receiving_clinic_id) {
+      setError("Please select a receiving clinic.");
+      return;
+    }
+
     if (!form.referring_clinic.trim() || !form.reason.trim()) {
       setError("Please complete all required fields.");
       return;
@@ -277,6 +310,7 @@ export default function Referrals() {
         body: JSON.stringify({
           patient_database_id: Number(form.patient_database_id),
           referring_clinic: form.referring_clinic.trim(),
+          receiving_clinic_id: Number(form.receiving_clinic_id),
           reason: form.reason.trim(),
           priority: form.priority
         })
@@ -292,6 +326,7 @@ export default function Referrals() {
       setForm({
         patient_database_id: "",
         referring_clinic: "",
+        receiving_clinic_id: "",
         reason: "",
         priority: "Normal"
       });
@@ -434,7 +469,8 @@ export default function Referrals() {
               <tr>
                 <th style={styles.th}>Referral ID</th>
                 <th style={styles.th}>Patient</th>
-                <th style={styles.th}>Clinic</th>
+                <th style={styles.th}>Referring Clinic</th>
+                <th style={styles.th}>Receiving Clinic</th>
                 <th style={styles.th}>Reason</th>
                 <th style={styles.th}>Priority</th>
                 <th style={styles.th}>Status</th>
@@ -458,6 +494,11 @@ export default function Referrals() {
 
                   <td style={styles.td}>
                     {referral.referring_clinic}
+                  </td>
+
+                  <td style={styles.td}>
+                    {clinicNames[String(referral.receiving_clinic_id)] ||
+                      "Not assigned"}
                   </td>
 
                   <td style={styles.td}>{referral.reason}</td>
@@ -524,7 +565,7 @@ export default function Referrals() {
             <h2 style={{ marginTop: 0 }}>Create New Referral</h2>
 
             <p style={{ color: "#71847f", fontSize: "13px" }}>
-              Select an existing patient from the SETU database.
+              Select a patient and the clinic receiving this referral.
             </p>
 
             <form onSubmit={createReferral}>
@@ -579,6 +620,26 @@ export default function Referrals() {
                   required
                   style={styles.input}
                 />
+              </div>
+
+              <div style={styles.field}>
+                <label style={styles.label}>Receiving Clinic *</label>
+
+                <select
+                  name="receiving_clinic_id"
+                  value={form.receiving_clinic_id}
+                  onChange={handleFormChange}
+                  required
+                  style={styles.input}
+                >
+                  <option value="">Choose receiving clinic</option>
+
+                  {clinics.map((clinic) => (
+                    <option key={clinic.id} value={clinic.id}>
+                      {clinic.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div style={styles.field}>
@@ -638,7 +699,7 @@ export default function Referrals() {
                 <button
                   type="submit"
                   style={styles.button}
-                  disabled={saving}
+                  disabled={saving || clinics.length === 0}
                 >
                   {saving ? "Creating..." : "Create Referral"}
                 </button>

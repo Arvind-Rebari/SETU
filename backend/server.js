@@ -8,6 +8,7 @@ const db = require("./config/database");
 // Import API routes
 const patientRoutes = require("./routes/patientRoutes");
 const referralRoutes = require("./routes/referralRoutes");
+const clinicRoutes = require("./routes/clinicRoutes");
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.get("/", (req, res) => {
 // API routes
 app.use("/api/patients", patientRoutes);
 app.use("/api/referrals", referralRoutes);
+app.use("/api/clinics", clinicRoutes);
 
 // Handle invalid routes
 app.use((req, res) => {
@@ -50,5 +52,6 @@ app.listen(PORT, () => {
   console.log(`Server: http://localhost:${PORT}`);
   console.log(`Patients API: http://localhost:${PORT}/api/patients`);
   console.log(`Referrals API: http://localhost:${PORT}/api/referrals`);
+  console.log(`Clinics API: http://localhost:${PORT}/api/clinics`);
   console.log("--------------------------------");
 });

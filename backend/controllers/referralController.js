@@ -1,7 +1,7 @@
 
 const Referral = require("../models/referralModel");
 
-// GET: Fetch all referrals
+// Get all referrals
 function getReferrals(req, res) {
   try {
     const referrals = Referral.getAllReferrals();
@@ -11,21 +11,29 @@ function getReferrals(req, res) {
       count: referrals.length,
       referrals
     });
-
   } catch (error) {
-    console.error("Get referrals error:", error);
+    console.error("Get referrals error:", error.message);
 
     res.status(500).json({
       success: false,
-      message: "Unable to fetch referrals."
+      message: "Unable to retrieve referrals."
     });
   }
 }
 
-// GET: Fetch one referral
+// Get one referral
 function getReferral(req, res) {
   try {
-    const referral = Referral.getReferralById(req.params.id);
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid referral ID."
+      });
+    }
+
+    const referral = Referral.getReferralById(id);
 
     if (!referral) {
       return res.status(404).json({
@@ -38,28 +46,27 @@ function getReferral(req, res) {
       success: true,
       referral
     });
-
   } catch (error) {
-    console.error("Get referral error:", error);
+    console.error("Get referral error:", error.message);
 
     res.status(500).json({
       success: false,
-      message: "Unable to fetch referral."
+      message: "Unable to retrieve referral."
     });
   }
 }
 
-// POST: Create a new referral using an existing patient
+// Create a new referral
 function addReferral(req, res) {
   try {
     const {
       patient_database_id,
       referring_clinic,
+      receiving_clinic_id,
       reason,
       priority
     } = req.body;
 
-    // Validate patient database ID
     if (
       !Number.isInteger(Number(patient_database_id)) ||
       Number(patient_database_id) <= 0
@@ -70,19 +77,34 @@ function addReferral(req, res) {
       });
     }
 
-    // Validate required fields
     if (
-      !String(referring_clinic || "").trim() ||
-      !String(reason || "").trim()
+      !Number.isInteger(Number(receiving_clinic_id)) ||
+      Number(receiving_clinic_id) <= 0
     ) {
       return res.status(400).json({
         success: false,
-        message: "Please provide all required referral details."
+        message: "Please select a valid receiving clinic."
       });
     }
 
-    // Validate priority
-    if (!["Normal", "Urgent"].includes(priority || "Normal")) {
+    if (!referring_clinic || !referring_clinic.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Referring clinic is required."
+      });
+    }
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Referral reason is required."
+      });
+    }
+
+    if (
+      priority &&
+      !["Normal", "Urgent"].includes(priority)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid referral priority."
@@ -90,10 +112,11 @@ function addReferral(req, res) {
     }
 
     const referral = Referral.createReferral({
-      patient_database_id: Number(patient_database_id),
       referral_id: `SETU-${Date.now()}`,
-      referring_clinic: String(referring_clinic).trim(),
-      reason: String(reason).trim(),
+      patient_database_id: Number(patient_database_id),
+      referring_clinic: referring_clinic.trim(),
+      receiving_clinic_id: Number(receiving_clinic_id),
+      reason: reason.trim(),
       referral_date: new Date().toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "short",
@@ -107,14 +130,16 @@ function addReferral(req, res) {
       message: "Referral created successfully.",
       referral
     });
-
   } catch (error) {
-    console.error("Create referral error:", error);
+    console.error("Create referral error:", error.message);
 
-    if (error.message === "Selected patient not found.") {
+    if (
+      error.message === "Selected patient not found." ||
+      error.message === "Selected receiving clinic not found."
+    ) {
       return res.status(404).json({
         success: false,
-        message: "Selected patient was not found."
+        message: error.message
       });
     }
 
@@ -125,9 +150,10 @@ function addReferral(req, res) {
   }
 }
 
-// PATCH: Update referral status
+// Update referral status
 function updateStatus(req, res) {
   try {
+    const id = Number(req.params.id);
     const { status } = req.body;
 
     const allowedStatuses = [
@@ -138,6 +164,13 @@ function updateStatus(req, res) {
       "Rejected"
     ];
 
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid referral ID."
+      });
+    }
+
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -145,10 +178,7 @@ function updateStatus(req, res) {
       });
     }
 
-    const referral = Referral.updateReferralStatus(
-      req.params.id,
-      status
-    );
+    const referral = Referral.updateReferralStatus(id, status);
 
     if (!referral) {
       return res.status(404).json({
@@ -162,9 +192,8 @@ function updateStatus(req, res) {
       message: "Referral status updated successfully.",
       referral
     });
-
   } catch (error) {
-    console.error("Update referral status error:", error);
+    console.error("Update referral status error:", error.message);
 
     res.status(500).json({
       success: false,

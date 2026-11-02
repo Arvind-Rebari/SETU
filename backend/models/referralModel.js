@@ -1,7 +1,7 @@
 
 const db = require("../config/database");
 
-// Create referrals table
+// Create referrals table if it does not exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS referrals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,10 +53,13 @@ function getAllReferrals() {
   return db.prepare(`
     SELECT
       r.*,
-      p.patient_id AS patient_code
+      p.patient_id AS patient_code,
+      c.name AS receiving_clinic_name
     FROM referrals r
     LEFT JOIN patients p
       ON p.id = r.patient_database_id
+    LEFT JOIN clinics c
+      ON c.id = r.receiving_clinic_id
     ORDER BY r.id DESC
   `).all();
 }
@@ -66,17 +69,20 @@ function getReferralById(id) {
   return db.prepare(`
     SELECT
       r.*,
-      p.patient_id AS patient_code
+      p.patient_id AS patient_code,
+      c.name AS receiving_clinic_name
     FROM referrals r
     LEFT JOIN patients p
       ON p.id = r.patient_database_id
+    LEFT JOIN clinics c
+      ON c.id = r.receiving_clinic_id
     WHERE r.id = ?
   `).get(id);
 }
 
-// Create referral using an existing patient
+// Create referral using an existing patient and receiving clinic
 function createReferral(referral) {
-  // Fetch selected patient
+  // Find selected patient
   const patient = db.prepare(`
     SELECT id, patient_id, name, age
     FROM patients
@@ -87,10 +93,22 @@ function createReferral(referral) {
     throw new Error("Selected patient not found.");
   }
 
-  // Insert referral with patient details
+  // Find selected receiving clinic
+  const clinic = db.prepare(`
+    SELECT id, clinic_code, name
+    FROM clinics
+    WHERE id = ?
+  `).get(referral.receiving_clinic_id);
+
+  if (!clinic) {
+    throw new Error("Selected receiving clinic not found.");
+  }
+
+  // Insert referral with patient and receiving clinic details
   const insert = db.prepare(`
     INSERT INTO referrals (
       patient_database_id,
+      receiving_clinic_id,
       referral_id,
       patient_name,
       patient_age,
@@ -99,11 +117,12 @@ function createReferral(referral) {
       referral_date,
       priority
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = insert.run(
     patient.id,
+    clinic.id,
     referral.referral_id,
     patient.name,
     patient.age,
