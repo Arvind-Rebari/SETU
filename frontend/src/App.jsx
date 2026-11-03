@@ -5,11 +5,12 @@ import {
   ChevronRight, ClipboardList, Clock3, FileText, HeartPulse,
   LayoutDashboard, Menu, MessageCircle, Plus, Search, Settings,
   ShieldCheck, Users, X, ArrowUpRight, Stethoscope, AlertCircle,
-  MoreHorizontal
+  MoreHorizontal, MapPin
 } from "lucide-react";
 
 import Referrals from "./pages/Referrals";
 import Patients from "./pages/Patients";
+import NearbyClinics from "./pages/NearbyClinics";
 import "./index.css";
 
 const PATIENTS_API = "http://localhost:5000/api/patients";
@@ -23,6 +24,7 @@ export default function App() {
     { name: "Dashboard", icon: LayoutDashboard },
     { name: "Referrals", icon: ClipboardList },
     { name: "Patients", icon: Users },
+    { name: "Nearby Clinics", icon: MapPin },
     { name: "Appointments", icon: CalendarDays },
     { name: "Messages", icon: MessageCircle },
     { name: "AI Assistant", icon: Activity },
@@ -38,32 +40,47 @@ export default function App() {
   return (
     <div className="app-shell">
       {sidebarOpen && (
-        <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="mobile-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="brand">
-          <div className="brand-icon"><HeartPulse size={27} /></div>
+          <div className="brand-icon">
+            <HeartPulse size={27} />
+          </div>
+
           <div>
             <h1>SETU</h1>
             <p>CONNECTED CARE</p>
           </div>
-          <button className="close-sidebar" onClick={() => setSidebarOpen(false)}>
+
+          <button
+            className="close-sidebar"
+            onClick={() => setSidebarOpen(false)}
+          >
             <X size={19} />
           </button>
         </div>
 
         <div className="clinic-switcher">
-          <div className="clinic-icon"><Stethoscope size={21} /></div>
+          <div className="clinic-icon">
+            <Stethoscope size={21} />
+          </div>
+
           <div>
             <strong>Sunrise Clinic</strong>
             <span>Healthcare Provider</span>
           </div>
+
           <ChevronDown size={16} />
         </div>
 
         <nav className="navigation">
           <p>MAIN MENU</p>
+
           {navigation.map(({ name, icon: Icon }) => (
             <button
               key={name}
@@ -80,7 +97,10 @@ export default function App() {
           <div className="help-card">
             <HeartPulse size={22} />
             <h4>Need a little help?</h4>
-            <p>We're here to make healthcare connections easier.</p>
+            <p>
+              We're here to make healthcare connections easier.
+            </p>
+
             <button onClick={() => alert("Help Centre coming soon.")}>
               Visit Help Centre <ArrowUpRight size={14} />
             </button>
@@ -88,10 +108,12 @@ export default function App() {
 
           <div className="profile-card">
             <div className="profile-avatar">PP</div>
+
             <div>
               <strong>Dr. Priya Patel</strong>
               <span>Clinic Administrator</span>
             </div>
+
             <MoreHorizontal size={19} />
           </div>
         </div>
@@ -100,9 +122,13 @@ export default function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="topbar-left">
-            <button className="menu-toggle" onClick={() => setSidebarOpen(true)}>
+            <button
+              className="menu-toggle"
+              onClick={() => setSidebarOpen(true)}
+            >
               <Menu size={22} />
             </button>
+
             <div className="breadcrumb">
               <span>Workspace</span>
               <ChevronRight size={14} />
@@ -115,19 +141,35 @@ export default function App() {
               <Search size={17} />
               <input placeholder="Search patients, referrals..." />
             </div>
-            <button className="notification-btn" onClick={() => alert("No new notifications.")}>
+
+            <button
+              className="notification-btn"
+              onClick={() => alert("No new notifications.")}
+            >
               <Bell size={19} />
             </button>
+
             <div className="topbar-profile">PP</div>
           </div>
         </header>
 
         <div className="page-content">
-          {activePage === "Dashboard" && <Dashboard onNavigate={navigate} />}
+          {activePage === "Dashboard" && (
+            <Dashboard onNavigate={navigate} />
+          )}
+
           {activePage === "Referrals" && <Referrals />}
+
           {activePage === "Patients" && <Patients />}
 
-          {!["Dashboard", "Referrals", "Patients"].includes(activePage) && (
+          {activePage === "Nearby Clinics" && <NearbyClinics />}
+
+          {![
+            "Dashboard",
+            "Referrals",
+            "Patients",
+            "Nearby Clinics"
+          ].includes(activePage) && (
             <ComingSoon page={activePage} />
           )}
         </div>
@@ -164,7 +206,9 @@ function Dashboard({ onNavigate }) {
         setReferrals(referralsData.referrals || []);
       } catch (err) {
         console.error("Dashboard loading error:", err);
-        setError("Could not connect to the SETU database. Please check that the backend is running.");
+        setError(
+          "Could not connect to the SETU database. Please check that the backend is running."
+        );
       } finally {
         setLoading(false);
       }
@@ -173,7 +217,8 @@ function Dashboard({ onNavigate }) {
     loadDashboardData();
   }, []);
 
-  const getStatus = (status) => (status || "").trim().toLowerCase();
+  const getStatus = (status) =>
+    (status || "").trim().toLowerCase();
 
   const pendingCount = referrals.filter((r) =>
     ["pending", "received", "in review"].includes(getStatus(r.status))
@@ -193,8 +238,14 @@ function Dashboard({ onNavigate }) {
 
   const recentReferrals = [...referrals]
     .sort((a, b) => {
-      const dateA = new Date(a.created_at || a.referral_date || 0).getTime();
-      const dateB = new Date(b.created_at || b.referral_date || 0).getTime();
+      const dateA = new Date(
+        a.created_at || a.referral_date || 0
+      ).getTime();
+
+      const dateB = new Date(
+        b.created_at || b.referral_date || 0
+      ).getTime();
+
       return dateB - dateA;
     })
     .slice(0, 3);
@@ -241,14 +292,25 @@ function Dashboard({ onNavigate }) {
     <>
       <section className="welcome-banner">
         <div className="welcome-content">
-          <span className="welcome-label">YOUR HEALTHCARE WORKSPACE</span>
+          <span className="welcome-label">
+            YOUR HEALTHCARE WORKSPACE
+          </span>
+
           <h1>Welcome back, Dr. Priya!</h1>
-          <p>Manage patient referrals, coordinate with healthcare providers and keep every patient journey connected.</p>
+
+          <p>
+            Manage patient referrals, coordinate with healthcare providers
+            and keep every patient journey connected.
+          </p>
+
           <button onClick={() => onNavigate("Referrals")}>
             Explore Referrals <ArrowUpRight size={15} />
           </button>
         </div>
-        <div className="welcome-art"><HeartPulse size={85} /></div>
+
+        <div className="welcome-art">
+          <HeartPulse size={85} />
+        </div>
       </section>
 
       <div className="dashboard-heading">
@@ -257,11 +319,17 @@ function Dashboard({ onNavigate }) {
           <h2>Your Overview</h2>
           <p>Live statistics from your SETU database.</p>
         </div>
-        <span className="date-filter"><CalendarDays size={16} /> Live Data</span>
+
+        <span className="date-filter">
+          <CalendarDays size={16} /> Live Data
+        </span>
       </div>
 
       {error && (
-        <div className="panel" style={{ padding: "16px", marginBottom: "20px" }}>
+        <div
+          className="panel"
+          style={{ padding: "16px", marginBottom: "20px" }}
+        >
           <p style={{ color: "#b42318" }}>{error}</p>
         </div>
       )}
@@ -269,7 +337,10 @@ function Dashboard({ onNavigate }) {
       <section className="stats-grid">
         {stats.map(({ title, value, note, icon: Icon, color }) => (
           <div className="stat-card" key={title}>
-            <div className={`stat-icon ${color}`}><Icon size={22} /></div>
+            <div className={`stat-icon ${color}`}>
+              <Icon size={22} />
+            </div>
+
             <div>
               <h3>{title}</h3>
               <strong>{loading ? "..." : value}</strong>
@@ -286,7 +357,11 @@ function Dashboard({ onNavigate }) {
               <h3>Recent Referrals</h3>
               <p>Latest patient handovers from the database.</p>
             </div>
-            <button className="text-action" onClick={() => onNavigate("Referrals")}>
+
+            <button
+              className="text-action"
+              onClick={() => onNavigate("Referrals")}
+            >
               View all <ArrowUpRight size={14} />
             </button>
           </div>
@@ -301,6 +376,7 @@ function Dashboard({ onNavigate }) {
                   <th>PRIORITY</th>
                 </tr>
               </thead>
+
               <tbody>
                 {loading ? (
                   <tr>
@@ -308,7 +384,9 @@ function Dashboard({ onNavigate }) {
                   </tr>
                 ) : recentReferrals.length === 0 ? (
                   <tr>
-                    <td colSpan="4">No referrals found. Create your first referral!</td>
+                    <td colSpan="4">
+                      No referrals found. Create your first referral!
+                    </td>
                   </tr>
                 ) : (
                   recentReferrals.map((r) => {
@@ -318,25 +396,42 @@ function Dashboard({ onNavigate }) {
                     return (
                       <tr key={r.id || r.referral_id}>
                         <td>
-                          <strong>{r.patient_name || "Unknown Patient"}</strong>
-                          <span className="table-subtext">{r.referral_id}</span>
+                          <strong>
+                            {r.patient_name || "Unknown Patient"}
+                          </strong>
+                          <span className="table-subtext">
+                            {r.referral_id}
+                          </span>
                         </td>
+
                         <td>{r.reason || "Not specified"}</td>
+
                         <td>
-                          <span className={`status-badge ${
-                            ["pending", "received", "in review"].includes(getStatus(status))
-                              ? "pending"
-                              : getStatus(status) === "rejected"
-                              ? "rejected"
-                              : "success"
-                          }`}>
+                          <span
+                            className={`status-badge ${
+                              [
+                                "pending",
+                                "received",
+                                "in review"
+                              ].includes(getStatus(status))
+                                ? "pending"
+                                : getStatus(status) === "rejected"
+                                ? "rejected"
+                                : "success"
+                            }`}
+                          >
                             {status}
                           </span>
                         </td>
+
                         <td>
-                          <span className={`priority ${
-                            getStatus(priority) === "urgent" ? "high" : "normal"
-                          }`}>
+                          <span
+                            className={`priority ${
+                              getStatus(priority) === "urgent"
+                                ? "high"
+                                : "normal"
+                            }`}
+                          >
                             {priority}
                           </span>
                         </td>
@@ -362,27 +457,56 @@ function Dashboard({ onNavigate }) {
             <span>Total referrals</span>
           </div>
 
-          <div style={{ display: "grid", gap: "14px", marginTop: "20px" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: "14px",
+              marginTop: "20px"
+            }}
+          >
             <div>
-              <span style={{ display: "flex", justifyContent: "space-between" }}>
+              <span
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
                 <span>Pending / In Review</span>
                 <strong>{loading ? "..." : pendingCount}</strong>
               </span>
             </div>
+
             <div>
-              <span style={{ display: "flex", justifyContent: "space-between" }}>
+              <span
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
                 <span>Accepted</span>
                 <strong>{loading ? "..." : acceptedCount}</strong>
               </span>
             </div>
+
             <div>
-              <span style={{ display: "flex", justifyContent: "space-between" }}>
+              <span
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
                 <span>Rejected</span>
                 <strong>{loading ? "..." : rejectedCount}</strong>
               </span>
             </div>
+
             <div>
-              <span style={{ display: "flex", justifyContent: "space-between" }}>
+              <span
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}
+              >
                 <span>Urgent</span>
                 <strong>{loading ? "..." : urgentCount}</strong>
               </span>
@@ -393,13 +517,32 @@ function Dashboard({ onNavigate }) {
 
       <section className="panel quick-panel">
         <div className="panel-heading">
-          <div><h3>Quick Actions</h3><p>Frequently used tools.</p></div>
+          <div>
+            <h3>Quick Actions</h3>
+            <p>Frequently used tools.</p>
+          </div>
         </div>
+
         <div className="quick-actions">
-          <button onClick={() => onNavigate("Referrals")}><Plus size={18} /> New Referral</button>
-          <button onClick={() => onNavigate("Patients")}><Users size={18} /> View Patients</button>
-          <button onClick={() => onNavigate("Appointments")}><CalendarDays size={18} /> Appointments</button>
-          <button onClick={() => onNavigate("AI Assistant")}><Activity size={18} /> AI Assistant</button>
+          <button onClick={() => onNavigate("Referrals")}>
+            <Plus size={18} /> New Referral
+          </button>
+
+          <button onClick={() => onNavigate("Patients")}>
+            <Users size={18} /> View Patients
+          </button>
+
+          <button onClick={() => onNavigate("Appointments")}>
+            <CalendarDays size={18} /> Appointments
+          </button>
+
+          <button onClick={() => onNavigate("AI Assistant")}>
+            <Activity size={18} /> AI Assistant
+          </button>
+
+          <button onClick={() => onNavigate("Nearby Clinics")}>
+            <MapPin size={18} /> Nearby Clinics
+          </button>
         </div>
       </section>
 
@@ -418,14 +561,20 @@ function ComingSoon({ page }) {
     Analytics: FileText,
     Settings
   };
+
   const Icon = icons[page] || HeartPulse;
 
   return (
     <div className="coming-soon">
-      <div className="coming-icon"><Icon size={35} /></div>
+      <div className="coming-icon">
+        <Icon size={35} />
+      </div>
+
       <span className="section-eyebrow">SETU WORKSPACE</span>
       <h2>{page}</h2>
+
       <p>This module is planned for an upcoming SETU update.</p>
+
       <span className="coming-badge">Coming soon</span>
     </div>
   );

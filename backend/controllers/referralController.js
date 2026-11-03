@@ -1,10 +1,46 @@
 
 const Referral = require("../models/referralModel");
 
-// Get all referrals
+// Get all referrals with optional clinic-wise filtering
 function getReferrals(req, res) {
   try {
-    const referrals = Referral.getAllReferrals();
+    const { referring_clinic_id, receiving_clinic_id } = req.query;
+
+    let referrals = Referral.getAllReferrals();
+
+    // Validate referring clinic ID
+    if (referring_clinic_id !== undefined) {
+      const clinicId = Number(referring_clinic_id);
+
+      if (!Number.isInteger(clinicId) || clinicId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid referring clinic ID."
+        });
+      }
+
+      referrals = referrals.filter(
+        (referral) =>
+          Number(referral.referring_clinic_id) === clinicId
+      );
+    }
+
+    // Validate receiving clinic ID
+    if (receiving_clinic_id !== undefined) {
+      const clinicId = Number(receiving_clinic_id);
+
+      if (!Number.isInteger(clinicId) || clinicId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid receiving clinic ID."
+        });
+      }
+
+      referrals = referrals.filter(
+        (referral) =>
+          Number(referral.receiving_clinic_id) === clinicId
+      );
+    }
 
     res.status(200).json({
       success: true,
