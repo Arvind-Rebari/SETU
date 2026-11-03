@@ -11,6 +11,7 @@ import {
 import Referrals from "./pages/Referrals";
 import Patients from "./pages/Patients";
 import NearbyClinics from "./pages/NearbyClinics";
+import Appointments from "./pages/Appointments";
 import "./index.css";
 
 const PATIENTS_API = "http://localhost:5000/api/patients";
@@ -164,11 +165,14 @@ export default function App() {
 
           {activePage === "Nearby Clinics" && <NearbyClinics />}
 
+          {activePage === "Appointments" && <Appointments />}
+
           {![
             "Dashboard",
             "Referrals",
             "Patients",
-            "Nearby Clinics"
+            "Nearby Clinics",
+            "Appointments"
           ].includes(activePage) && (
             <ComingSoon page={activePage} />
           )}

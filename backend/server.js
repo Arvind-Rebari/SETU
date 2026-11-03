@@ -9,7 +9,7 @@ const db = require("./config/database");
 const patientRoutes = require("./routes/patientRoutes");
 const referralRoutes = require("./routes/referralRoutes");
 const clinicRoutes = require("./routes/clinicRoutes");
-
+const appointmentRoutes = require("./routes/appointmentRoutes");
 const app = express();
 
 // Middleware
@@ -34,7 +34,7 @@ app.get("/", (req, res) => {
 app.use("/api/patients", patientRoutes);
 app.use("/api/referrals", referralRoutes);
 app.use("/api/clinics", clinicRoutes);
-
+app.use("/api/appointments", appointmentRoutes);
 // Handle invalid routes
 app.use((req, res) => {
   res.status(404).json({
