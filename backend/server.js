@@ -1,4 +1,6 @@
 
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 
@@ -10,6 +12,9 @@ const patientRoutes = require("./routes/patientRoutes");
 const referralRoutes = require("./routes/referralRoutes");
 const clinicRoutes = require("./routes/clinicRoutes");
 const appointmentRoutes = require("./routes/appointmentRoutes");
+const messageRoutes = require("./routes/messageRoutes");
+const aiRoutes = require("./routes/aiRoutes");
+
 const app = express();
 
 // Middleware
@@ -20,7 +25,7 @@ app.use(cors({
   ]
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "10kb" }));
 
 // Test route
 app.get("/", (req, res) => {
@@ -35,6 +40,9 @@ app.use("/api/patients", patientRoutes);
 app.use("/api/referrals", referralRoutes);
 app.use("/api/clinics", clinicRoutes);
 app.use("/api/appointments", appointmentRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/ai", aiRoutes);
+
 // Handle invalid routes
 app.use((req, res) => {
   res.status(404).json({
@@ -53,5 +61,8 @@ app.listen(PORT, () => {
   console.log(`Patients API: http://localhost:${PORT}/api/patients`);
   console.log(`Referrals API: http://localhost:${PORT}/api/referrals`);
   console.log(`Clinics API: http://localhost:${PORT}/api/clinics`);
+  console.log(`Appointments API: http://localhost:${PORT}/api/appointments`);
+  console.log(`Messages API: http://localhost:${PORT}/api/messages`);
+  console.log(`AI API: http://localhost:${PORT}/api/ai/chat`);
   console.log("--------------------------------");
 });

@@ -1,7 +1,8 @@
 
 const db = require("../config/database");
 
-// Create referrals table if it does not exist
+// Create the table with all required fields if it does not exist.
+// This does not replace or delete an existing table.
 db.exec(`
   CREATE TABLE IF NOT EXISTS referrals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -13,11 +14,34 @@ db.exec(`
     referral_date TEXT NOT NULL,
     status TEXT DEFAULT 'Pending',
     priority TEXT DEFAULT 'Normal',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    patient_database_id INTEGER,
+    referring_clinic_id INTEGER,
+    receiving_clinic_id INTEGER
   )
 `);
 
-// Demo referral records
+// Safely backfill referring clinic IDs only when the clinic name
+// exactly matches a registered clinic name.
+db.exec(`
+  UPDATE referrals
+  SET referring_clinic_id = (
+    SELECT id
+    FROM clinics
+    WHERE LOWER(TRIM(clinics.name)) =
+          LOWER(TRIM(referrals.referring_clinic))
+    LIMIT 1
+  )
+  WHERE referring_clinic_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM clinics
+      WHERE LOWER(TRIM(clinics.name)) =
+            LOWER(TRIM(referrals.referring_clinic))
+    )
+`);
+
+// Existing demo records are preserved.
 const demoReferrals = [
   ["SETU-1024", "Ananya Sharma", 34, "Sunrise Clinic", "Cardiology consultation", "01 Nov 2026", "Received", "Normal"],
   ["SETU-1025", "Rahul Mehta", 48, "City Health Centre", "Orthopaedic referral", "01 Nov 2026", "Accepted", "Urgent"],
@@ -26,7 +50,7 @@ const demoReferrals = [
   ["SETU-1028", "Meera Joshi", 41, "Sunrise Clinic", "General check-up", "30 Oct 2026", "In Review", "Normal"]
 ];
 
-const insertReferral = db.prepare(`
+const insertDemoReferral = db.prepare(`
   INSERT OR IGNORE INTO referrals (
     referral_id,
     patient_name,
@@ -42,47 +66,46 @@ const insertReferral = db.prepare(`
 
 const seedReferrals = db.transaction(() => {
   for (const referral of demoReferrals) {
-    insertReferral.run(...referral);
+    insertDemoReferral.run(...referral);
   }
 });
 
 seedReferrals();
 
-// Get all referrals
+// Shared query for referral details.
+const referralSelect = `
+  SELECT
+    r.*,
+    p.patient_id AS patient_code,
+    referring.name AS referring_clinic_name,
+    receiving.name AS receiving_clinic_name
+  FROM referrals r
+  LEFT JOIN patients p
+    ON p.id = r.patient_database_id
+  LEFT JOIN clinics referring
+    ON referring.id = r.referring_clinic_id
+  LEFT JOIN clinics receiving
+    ON receiving.id = r.receiving_clinic_id
+`;
+
+// Get all referrals.
 function getAllReferrals() {
   return db.prepare(`
-    SELECT
-      r.*,
-      p.patient_id AS patient_code,
-      c.name AS receiving_clinic_name
-    FROM referrals r
-    LEFT JOIN patients p
-      ON p.id = r.patient_database_id
-    LEFT JOIN clinics c
-      ON c.id = r.receiving_clinic_id
+    ${referralSelect}
     ORDER BY r.id DESC
   `).all();
 }
 
-// Get one referral
+// Get one referral.
 function getReferralById(id) {
   return db.prepare(`
-    SELECT
-      r.*,
-      p.patient_id AS patient_code,
-      c.name AS receiving_clinic_name
-    FROM referrals r
-    LEFT JOIN patients p
-      ON p.id = r.patient_database_id
-    LEFT JOIN clinics c
-      ON c.id = r.receiving_clinic_id
+    ${referralSelect}
     WHERE r.id = ?
   `).get(id);
 }
 
-// Create referral using an existing patient and receiving clinic
+// Create a referral with both clinic IDs.
 function createReferral(referral) {
-  // Find selected patient
   const patient = db.prepare(`
     SELECT id, patient_id, name, age
     FROM patients
@@ -93,21 +116,34 @@ function createReferral(referral) {
     throw new Error("Selected patient not found.");
   }
 
-  // Find selected receiving clinic
-  const clinic = db.prepare(`
+  const referringClinic = db.prepare(`
+    SELECT id, clinic_code, name
+    FROM clinics
+    WHERE id = ?
+  `).get(referral.referring_clinic_id);
+
+  if (!referringClinic) {
+    throw new Error("Selected referring clinic not found.");
+  }
+
+  const receivingClinic = db.prepare(`
     SELECT id, clinic_code, name
     FROM clinics
     WHERE id = ?
   `).get(referral.receiving_clinic_id);
 
-  if (!clinic) {
+  if (!receivingClinic) {
     throw new Error("Selected receiving clinic not found.");
   }
 
-  // Insert referral with patient and receiving clinic details
+  if (referringClinic.id === receivingClinic.id) {
+    throw new Error("Referring and receiving clinics must be different.");
+  }
+
   const insert = db.prepare(`
     INSERT INTO referrals (
       patient_database_id,
+      referring_clinic_id,
       receiving_clinic_id,
       referral_id,
       patient_name,
@@ -117,16 +153,17 @@ function createReferral(referral) {
       referral_date,
       priority
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = insert.run(
     patient.id,
-    clinic.id,
+    referringClinic.id,
+    receivingClinic.id,
     referral.referral_id,
     patient.name,
     patient.age,
-    referral.referring_clinic,
+    referringClinic.name,
     referral.reason,
     referral.referral_date,
     referral.priority || "Normal"
@@ -135,15 +172,13 @@ function createReferral(referral) {
   return getReferralById(result.lastInsertRowid);
 }
 
-// Update referral status
+// Update referral status.
 function updateReferralStatus(id, status) {
-  const update = db.prepare(`
+  const result = db.prepare(`
     UPDATE referrals
     SET status = ?
     WHERE id = ?
-  `);
-
-  const result = update.run(status, id);
+  `).run(status, id);
 
   if (result.changes === 0) {
     return null;

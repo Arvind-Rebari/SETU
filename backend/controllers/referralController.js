@@ -1,14 +1,13 @@
 
 const Referral = require("../models/referralModel");
 
-// Get all referrals with optional clinic-wise filtering
+// Get referrals with optional clinic-wise filtering.
 function getReferrals(req, res) {
   try {
     const { referring_clinic_id, receiving_clinic_id } = req.query;
 
     let referrals = Referral.getAllReferrals();
 
-    // Validate referring clinic ID
     if (referring_clinic_id !== undefined) {
       const clinicId = Number(referring_clinic_id);
 
@@ -25,7 +24,6 @@ function getReferrals(req, res) {
       );
     }
 
-    // Validate receiving clinic ID
     if (receiving_clinic_id !== undefined) {
       const clinicId = Number(receiving_clinic_id);
 
@@ -42,22 +40,23 @@ function getReferrals(req, res) {
       );
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: referrals.length,
       referrals
     });
+
   } catch (error) {
     console.error("Get referrals error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Unable to retrieve referrals."
     });
   }
 }
 
-// Get one referral
+// Get one referral.
 function getReferral(req, res) {
   try {
     const id = Number(req.params.id);
@@ -78,26 +77,27 @@ function getReferral(req, res) {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       referral
     });
+
   } catch (error) {
     console.error("Get referral error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Unable to retrieve referral."
     });
   }
 }
 
-// Create a new referral
+// Create a new referral.
 function addReferral(req, res) {
   try {
     const {
       patient_database_id,
-      referring_clinic,
+      referring_clinic_id,
       receiving_clinic_id,
       reason,
       priority
@@ -114,6 +114,16 @@ function addReferral(req, res) {
     }
 
     if (
+      !Number.isInteger(Number(referring_clinic_id)) ||
+      Number(referring_clinic_id) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid referring clinic."
+      });
+    }
+
+    if (
       !Number.isInteger(Number(receiving_clinic_id)) ||
       Number(receiving_clinic_id) <= 0
     ) {
@@ -123,24 +133,28 @@ function addReferral(req, res) {
       });
     }
 
-    if (!referring_clinic || !referring_clinic.trim()) {
+    if (Number(referring_clinic_id) === Number(receiving_clinic_id)) {
       return res.status(400).json({
         success: false,
-        message: "Referring clinic is required."
+        message: "Referring and receiving clinics must be different."
       });
     }
 
-    if (!reason || !reason.trim()) {
+    if (typeof reason !== "string" || !reason.trim()) {
       return res.status(400).json({
         success: false,
         message: "Referral reason is required."
       });
     }
 
-    if (
-      priority &&
-      !["Normal", "Urgent"].includes(priority)
-    ) {
+    if (reason.length > 2000) {
+      return res.status(400).json({
+        success: false,
+        message: "Referral reason must be under 2000 characters."
+      });
+    }
+
+    if (priority && !["Normal", "Urgent"].includes(priority)) {
       return res.status(400).json({
         success: false,
         message: "Invalid referral priority."
@@ -150,7 +164,7 @@ function addReferral(req, res) {
     const referral = Referral.createReferral({
       referral_id: `SETU-${Date.now()}`,
       patient_database_id: Number(patient_database_id),
-      referring_clinic: referring_clinic.trim(),
+      referring_clinic_id: Number(referring_clinic_id),
       receiving_clinic_id: Number(receiving_clinic_id),
       reason: reason.trim(),
       referral_date: new Date().toLocaleDateString("en-IN", {
@@ -161,32 +175,46 @@ function addReferral(req, res) {
       priority: priority || "Normal"
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Referral created successfully.",
       referral
     });
+
   } catch (error) {
     console.error("Create referral error:", error.message);
 
-    if (
-      error.message === "Selected patient not found." ||
-      error.message === "Selected receiving clinic not found."
-    ) {
+    const notFoundErrors = [
+      "Selected patient not found.",
+      "Selected referring clinic not found.",
+      "Selected receiving clinic not found."
+    ];
+
+    if (notFoundErrors.includes(error.message)) {
       return res.status(404).json({
         success: false,
         message: error.message
       });
     }
 
-    res.status(500).json({
+    if (
+      error.message ===
+      "Referring and receiving clinics must be different."
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       message: "Unable to create referral."
     });
   }
 }
 
-// Update referral status
+// Update referral status.
 function updateStatus(req, res) {
   try {
     const id = Number(req.params.id);
@@ -223,15 +251,16 @@ function updateStatus(req, res) {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Referral status updated successfully.",
       referral
     });
+
   } catch (error) {
     console.error("Update referral status error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Unable to update referral status."
     });

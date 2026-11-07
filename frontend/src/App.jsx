@@ -12,6 +12,8 @@ import Referrals from "./pages/Referrals";
 import Patients from "./pages/Patients";
 import NearbyClinics from "./pages/NearbyClinics";
 import Appointments from "./pages/Appointments";
+import Messages from "./pages/Messages";
+import AIAssistant from "./pages/AIAssistant";
 import "./index.css";
 
 const PATIENTS_API = "http://localhost:5000/api/patients";
@@ -167,12 +169,18 @@ export default function App() {
 
           {activePage === "Appointments" && <Appointments />}
 
+          {activePage === "Messages" && <Messages />}
+
+          {activePage === "AI Assistant" && <AIAssistant />}
+
           {![
             "Dashboard",
             "Referrals",
             "Patients",
             "Nearby Clinics",
-            "Appointments"
+            "Appointments",
+            "Messages",
+            "AI Assistant"
           ].includes(activePage) && (
             <ComingSoon page={activePage} />
           )}

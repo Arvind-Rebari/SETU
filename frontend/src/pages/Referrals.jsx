@@ -152,6 +152,7 @@ export default function Referrals() {
   const [referrals, setReferrals] = useState([]);
   const [patients, setPatients] = useState([]);
   const [clinics, setClinics] = useState([]);
+
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -161,7 +162,7 @@ export default function Referrals() {
 
   const [form, setForm] = useState({
     patient_database_id: "",
-    referring_clinic: "",
+    referring_clinic_id: "",
     receiving_clinic_id: "",
     reason: "",
     priority: "Normal"
@@ -226,11 +227,15 @@ export default function Referrals() {
       String(patient.id) === String(form.patient_database_id)
   );
 
-  const clinicNames = useMemo(() => {
-    return Object.fromEntries(
-      clinics.map((clinic) => [String(clinic.id), clinic.name])
-    );
-  }, [clinics]);
+  const selectedReferringClinic = clinics.find(
+    (clinic) =>
+      String(clinic.id) === String(form.referring_clinic_id)
+  );
+
+  const receivingClinics = clinics.filter(
+    (clinic) =>
+      String(clinic.id) !== String(form.referring_clinic_id)
+  );
 
   const filteredReferrals = useMemo(() => {
     const query = search.toLowerCase().trim();
@@ -238,14 +243,12 @@ export default function Referrals() {
     if (!query) return referrals;
 
     return referrals.filter((referral) => {
-      const receivingClinic =
-        clinicNames[String(referral.receiving_clinic_id)] || "";
-
       return [
         referral.referral_id,
         referral.patient_name,
+        referral.referring_clinic_name,
         referral.referring_clinic,
-        receivingClinic,
+        referral.receiving_clinic_name,
         referral.reason,
         referral.status,
         referral.priority
@@ -255,12 +258,14 @@ export default function Referrals() {
           String(value).toLowerCase().includes(query)
         );
     });
-  }, [referrals, search, clinicNames]);
+  }, [referrals, search]);
 
   const stats = {
     total: referrals.length,
     pending: referrals.filter(
-      (item) => item.status === "Pending" || item.status === "Received"
+      (item) =>
+        item.status === "Pending" ||
+        item.status === "Received"
     ).length,
     accepted: referrals.filter(
       (item) => item.status === "Accepted"
@@ -273,10 +278,38 @@ export default function Referrals() {
   function handleFormChange(event) {
     const { name, value } = event.target;
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value
-    }));
+    setForm((previous) => {
+      const updated = {
+        ...previous,
+        [name]: value
+      };
+
+      // If the referring clinic changes, clear the receiving
+      // clinic when it is now the same clinic.
+      if (
+        name === "referring_clinic_id" &&
+        String(updated.receiving_clinic_id) === String(value)
+      ) {
+        updated.receiving_clinic_id = "";
+      }
+
+      return updated;
+    });
+  }
+
+  function openNewReferral() {
+    setError("");
+    setMessage("");
+
+    setForm({
+      patient_database_id: "",
+      referring_clinic_id: "",
+      receiving_clinic_id: "",
+      reason: "",
+      priority: "Normal"
+    });
+
+    setShowModal(true);
   }
 
   async function createReferral(event) {
@@ -289,13 +322,26 @@ export default function Referrals() {
       return;
     }
 
+    if (!form.referring_clinic_id) {
+      setError("Please select a referring clinic.");
+      return;
+    }
+
     if (!form.receiving_clinic_id) {
       setError("Please select a receiving clinic.");
       return;
     }
 
-    if (!form.referring_clinic.trim() || !form.reason.trim()) {
-      setError("Please complete all required fields.");
+    if (
+      String(form.referring_clinic_id) ===
+      String(form.receiving_clinic_id)
+    ) {
+      setError("Referring and receiving clinics must be different.");
+      return;
+    }
+
+    if (!form.reason.trim()) {
+      setError("Please enter the referral reason.");
       return;
     }
 
@@ -309,7 +355,7 @@ export default function Referrals() {
         },
         body: JSON.stringify({
           patient_database_id: Number(form.patient_database_id),
-          referring_clinic: form.referring_clinic.trim(),
+          referring_clinic_id: Number(form.referring_clinic_id),
           receiving_clinic_id: Number(form.receiving_clinic_id),
           reason: form.reason.trim(),
           priority: form.priority
@@ -319,13 +365,16 @@ export default function Referrals() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.message || "Unable to create referral.");
+        throw new Error(
+          data.message || "Unable to create referral."
+        );
       }
 
       setMessage("Referral created successfully!");
+
       setForm({
         patient_database_id: "",
-        referring_clinic: "",
+        referring_clinic_id: "",
         receiving_clinic_id: "",
         reason: "",
         priority: "Normal"
@@ -333,6 +382,7 @@ export default function Referrals() {
 
       setShowModal(false);
       await fetchReferrals();
+
     } catch (err) {
       setError(err.message || "Unable to create referral.");
     } finally {
@@ -345,24 +395,32 @@ export default function Referrals() {
     setMessage("");
 
     try {
-      const response = await fetch(`${REFERRALS_API}/${id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ status })
-      });
+      const response = await fetch(
+        `${REFERRALS_API}/${id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ status })
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.message || "Unable to update status.");
+        throw new Error(
+          data.message || "Unable to update status."
+        );
       }
 
       await fetchReferrals();
       setMessage("Referral status updated successfully.");
+
     } catch (err) {
-      setError(err.message || "Unable to update referral status.");
+      setError(
+        err.message || "Unable to update referral status."
+      );
     }
   }
 
@@ -417,11 +475,7 @@ export default function Referrals() {
           <button
             type="button"
             style={styles.button}
-            onClick={() => {
-              setError("");
-              setMessage("");
-              setShowModal(true);
-            }}
+            onClick={openNewReferral}
           >
             + New Referral
           </button>
@@ -493,12 +547,13 @@ export default function Referrals() {
                   </td>
 
                   <td style={styles.td}>
-                    {referral.referring_clinic}
+                    {referral.referring_clinic_name ||
+                      referral.referring_clinic ||
+                      "Not assigned"}
                   </td>
 
                   <td style={styles.td}>
-                    {clinicNames[String(referral.receiving_clinic_id)] ||
-                      "Not assigned"}
+                    {referral.receiving_clinic_name || "Not assigned"}
                   </td>
 
                   <td style={styles.td}>{referral.reason}</td>
@@ -565,7 +620,7 @@ export default function Referrals() {
             <h2 style={{ marginTop: 0 }}>Create New Referral</h2>
 
             <p style={{ color: "#71847f", fontSize: "13px" }}>
-              Select a patient and the clinic receiving this referral.
+              Select a patient, referring clinic and receiving clinic.
             </p>
 
             <form onSubmit={createReferral}>
@@ -611,28 +666,14 @@ export default function Referrals() {
               <div style={styles.field}>
                 <label style={styles.label}>Referring Clinic *</label>
 
-                <input
-                  name="referring_clinic"
-                  type="text"
-                  value={form.referring_clinic}
-                  onChange={handleFormChange}
-                  placeholder="Enter referring clinic"
-                  required
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={styles.field}>
-                <label style={styles.label}>Receiving Clinic *</label>
-
                 <select
-                  name="receiving_clinic_id"
-                  value={form.receiving_clinic_id}
+                  name="referring_clinic_id"
+                  value={form.referring_clinic_id}
                   onChange={handleFormChange}
                   required
                   style={styles.input}
                 >
-                  <option value="">Choose receiving clinic</option>
+                  <option value="">Choose referring clinic</option>
 
                   {clinics.map((clinic) => (
                     <option key={clinic.id} value={clinic.id}>
@@ -643,6 +684,37 @@ export default function Referrals() {
               </div>
 
               <div style={styles.field}>
+                <label style={styles.label}>Receiving Clinic *</label>
+
+                <select
+                  name="receiving_clinic_id"
+                  value={form.receiving_clinic_id}
+                  onChange={handleFormChange}
+                  required
+                  disabled={!form.referring_clinic_id}
+                  style={styles.input}
+                >
+                  <option value="">
+                    {form.referring_clinic_id
+                      ? "Choose receiving clinic"
+                      : "Choose referring clinic first"}
+                  </option>
+
+                  {receivingClinics.map((clinic) => (
+                    <option key={clinic.id} value={clinic.id}>
+                      {clinic.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedReferringClinic && (
+                <p style={{ color: "#71847f", fontSize: "12px" }}>
+                  Sending from: {selectedReferringClinic.name}
+                </p>
+              )}
+
+              <div style={styles.field}>
                 <label style={styles.label}>Reason for Referral *</label>
 
                 <textarea
@@ -651,6 +723,7 @@ export default function Referrals() {
                   onChange={handleFormChange}
                   placeholder="Enter reason for referral"
                   required
+                  maxLength={2000}
                   rows={4}
                   style={{
                     ...styles.input,
@@ -699,7 +772,7 @@ export default function Referrals() {
                 <button
                   type="submit"
                   style={styles.button}
-                  disabled={saving || clinics.length === 0}
+                  disabled={saving || clinics.length < 2}
                 >
                   {saving ? "Creating..." : "Create Referral"}
                 </button>
